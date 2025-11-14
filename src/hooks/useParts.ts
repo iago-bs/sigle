@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { DEFAULT_SHOP_TOKEN } from '../lib/constants';
 
 export interface Part {
   id: string;
@@ -47,15 +48,11 @@ export function useParts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const shopToken = user?.shopToken;
+  const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
   // Buscar peças
   const fetchParts = useCallback(async () => {
-    if (!shopToken) {
-      setParts([]);
-      setLoading(false);
-      return;
-    }
+    // Modo loja única: sempre usa token padrão
 
     try {
       setLoading(true);
@@ -88,9 +85,7 @@ export function useParts() {
 
   // Criar peça
   const createPart = useCallback(async (partData: PartInput): Promise<Part> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     // Calcular total_price
     const total_price = partData.quantity * partData.unit_price;
@@ -127,9 +122,7 @@ export function useParts() {
 
   // Atualizar peça
   const updatePart = useCallback(async (id: string, updates: Partial<PartInput>): Promise<Part> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     // Recalcular total_price se quantity ou unit_price mudaram
     let updateData: any = { ...updates };
@@ -174,9 +167,7 @@ export function useParts() {
 
   // Deletar peça
   const deletePart = useCallback(async (id: string): Promise<void> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/parts/${id}`,

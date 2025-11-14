@@ -1,6 +1,6 @@
 // Page for viewing and managing inactive (soft-deleted) clients
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Search, RotateCcw, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -20,10 +20,15 @@ interface InactiveClientsPageProps {
 }
 
 export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
-  const { clients, loading, reactivateClient, deleteClient } = useClients();
+  const { clients, loading, reactivateClient, deleteClient, fetchClients } = useClients({ autoFetch: false });
   const [searchQuery, setSearchQuery] = useState("");
   const [clientToRestore, setClientToRestore] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+
+  // Garantir que carregamos também os inativos ao entrar na página
+  useEffect(() => {
+    fetchClients(true);
+  }, [fetchClients]);
 
   // Filter inactive clients
   const inactiveClients = clients.filter((client) => !client.is_active);
@@ -46,6 +51,8 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
       await reactivateClient(clientToRestore.id);
       toast.success(`Cliente "${clientToRestore.name}" reativado com sucesso!`);
       setClientToRestore(null);
+      // Recarregar a lista incluindo inativos para refletir mudanças
+      fetchClients(true);
     } catch (error) {
       console.error('Error reactivating client:', error);
       toast.error(error instanceof Error ? error.message : "Erro ao reativar cliente");
@@ -59,6 +66,8 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
       await deleteClient(clientToDelete.id);
       toast.success(`Cliente "${clientToDelete.name}" excluído permanentemente!`);
       setClientToDelete(null);
+      // Recarregar para atualizar a lista
+      fetchClients(true);
     } catch (error) {
       console.error('Error deleting client:', error);
       toast.error(error instanceof Error ? error.message : "Erro ao deletar cliente");

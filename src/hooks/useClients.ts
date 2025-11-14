@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { DEFAULT_SHOP_TOKEN } from '../lib/constants';
 
 export interface Client {
   id: string;
@@ -33,22 +34,17 @@ export interface ClientInput {
   state?: string;
 }
 
-export function useClients() {
+export function useClients(options?: { autoFetch?: boolean }) {
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const shopToken = user?.shopToken;
+  const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
   // Buscar clientes ativos
   const fetchClients = useCallback(async (includeInactive = false) => {
-    if (!shopToken) {
-      console.log('🔍 [useClients] fetchClients - SEM shopToken, limpando lista');
-      setClients([]);
-      setLoading(false);
-      return;
-    }
+    // Modo loja única: sempre usa token padrão
 
     try {
       setLoading(true);
@@ -91,9 +87,7 @@ export function useClients() {
 
   // Criar cliente
   const createClient = useCallback(async (clientData: ClientInput): Promise<Client> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     console.log('✨ [useClients] createClient - Criando cliente com shopToken:', shopToken.substring(0, 8) + '...');
     console.log('✨ [useClients] createClient - Dados:', clientData);
@@ -141,9 +135,7 @@ export function useClients() {
 
   // Atualizar cliente
   const updateClient = useCallback(async (id: string, updates: Partial<ClientInput>): Promise<Client> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/clients/${id}`,
@@ -172,9 +164,7 @@ export function useClients() {
 
   // Inativar cliente (soft delete)
   const inactivateClient = useCallback(async (id: string): Promise<void> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/clients/${id}/inactivate`,
@@ -197,9 +187,7 @@ export function useClients() {
 
   // Reativar cliente
   const reactivateClient = useCallback(async (id: string): Promise<void> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/clients/${id}/reactivate`,
@@ -254,8 +242,10 @@ export function useClients() {
 
   // Carregar clientes ao montar ou quando shopToken mudar
   useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
+    if (options?.autoFetch !== false) {
+      fetchClients();
+    }
+  }, [fetchClients, options?.autoFetch]);
 
   return {
     clients,

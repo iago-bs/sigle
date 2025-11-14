@@ -1,5 +1,8 @@
 import type { Client, Appointment, Part, StockPart, ServiceOrder, Technician } from "../types";
 
+// Token padrão para modo loja única (UUID válido)
+export const DEFAULT_SHOP_TOKEN = '00000000-0000-0000-0000-000000000001';
+
 
 export const STORAGE_KEYS = {
   CLIENTS: "sigle_clients",

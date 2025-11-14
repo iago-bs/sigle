@@ -1,10 +1,10 @@
 // Main application entry point - Refactored for better modularity with organized component structure
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { toast } from "sonner";
-import { Key, Copy } from "lucide-react";
+// Login/Token removidos no modo loja única
 
 // Types
 import type { Appointment, Part, StockPart, OnlinePart, ServiceOrder, Technician, PageType, Equipment } from "./types";
@@ -18,7 +18,8 @@ import {
   initialParts,
   initialStockParts,
   initialServiceOrders,
-  initialTechnicians
+  initialTechnicians,
+  DEFAULT_SHOP_TOKEN
 } from "./lib/constants";
 
 // Custom Hooks
@@ -37,11 +38,11 @@ import { formatDateBR, calculateWarrantyEndDate } from "./lib/date-utils";
 // ==================== COMPONENTS - ORGANIZED BY CATEGORY ====================
 
 // Auth Components
-import { LoginPage } from "./components/auth/LoginPage";
-import { SignUpPage } from "./components/auth/SignUpPage";
+// import { LoginPage } from "./components/auth/LoginPage";
+// import { SignUpPage } from "./components/auth/SignUpPage";
 
 // Setup Components
-import { ShopTokenModal } from "./components/ShopTokenModal";
+// import { ShopTokenModal } from "./components/ShopTokenModal";
 
 // Agendamentos (Appointments) - Using organized folder
 import { AddAppointmentModal } from "./components/agendamentos/AddAppointmentModal";
@@ -100,16 +101,14 @@ import { VariablesPage } from "./components/VariablesPage";
 
 // UI Components
 import { Toaster } from "./components/ui/sonner";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
-import { Button } from "./components/ui/button";
+// import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
+// import { Button } from "./components/ui/button";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 
 export default function App() {
   // Authentication
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [showInitialTokenModal, setShowInitialTokenModal] = useState(false);
-  const [justCreatedAccount, setJustCreatedAccount] = useState(false);
+  // Modo loja única: usa token padrão (UUID)
 
   // Custom hooks for state management with Supabase
   const currentTime = useClock();
@@ -151,7 +150,7 @@ export default function App() {
   const [isServiceOrderCompletionModalOpen, setIsServiceOrderCompletionModalOpen] = useState(false);
   const [isReceiptPrintModalOpen, setIsReceiptPrintModalOpen] = useState(false);
   const [isDeliveryDateModalOpen, setIsDeliveryDateModalOpen] = useState(false);
-  const [isShopTokenModalOpen, setIsShopTokenModalOpen] = useState(false);
+  // Token modal removido no modo loja única
   const [isSaleInvoiceModalOpen, setIsSaleInvoiceModalOpen] = useState(false);
   const [isFromHistory, setIsFromHistory] = useState(false);
   
@@ -213,32 +212,9 @@ export default function App() {
 
   // ==================== HANDLERS ====================
 
-  // Show token modal on first login after account creation
-  useEffect(() => {
-    if (user && justCreatedAccount) {
-      // Small delay to ensure smooth transition
-      const timer = setTimeout(() => {
-        setShowInitialTokenModal(true);
-        setJustCreatedAccount(false);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [user, justCreatedAccount]);
-
-  // Handler to show token modal before logout
+  // Logout desativado no modo loja única
   const handleLogout = () => {
-    setIsShopTokenModalOpen(true);
-  };
-
-  // Handler to confirm logout (after showing token)
-  const handleConfirmLogout = async () => {
-    try {
-      await signOut();
-      toast.success("Logout realizado com sucesso!");
-    } catch (error) {
-      console.error("Error logging out:", error);
-      toast.error("Erro ao fazer logout");
-    }
+    toast.info("Logout desativado no modo loja única");
   };
 
   // Drag and drop handler for appointments
@@ -774,14 +750,14 @@ export default function App() {
       // Adicionar o token da loja
       const invoiceWithToken = {
         ...invoice,
-        shop_token: user?.shopToken || ""
+        shop_token: DEFAULT_SHOP_TOKEN
       };
 
       // Criar a nota fiscal como uma O.S completa
       await createServiceOrder(invoiceWithToken);
 
       // NOVO: Marcar equipamento como vendido no backend e recarregar a lista
-      if (equipmentId && user?.shopToken) {
+      if (equipmentId) {
         try {
           const { projectId, publicAnonKey } = await import('./utils/supabase/info');
           const response = await fetch(
@@ -793,7 +769,7 @@ export default function App() {
                 'Authorization': `Bearer ${publicAnonKey}`,
               },
               body: JSON.stringify({
-                shopToken: user.shopToken,
+                shopToken: DEFAULT_SHOP_TOKEN,
                 equipmentId: equipmentId,
                 soldDate: invoice.delivery_date || new Date().toISOString(),
                 invoiceId: invoice.id,
@@ -894,54 +870,7 @@ export default function App() {
 
   // ==================== RENDER ====================
 
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-  <div className="min-h-screen bg-linear-to-br from-[#f5f0e8] to-[#e8dcc8] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-[#8b7355] rounded-full flex items-center justify-center mx-auto mb-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-          </div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show authentication screens if user is not logged in
-  if (!user) {
-    if (authMode === 'login') {
-      return (
-        <>
-          <Toaster position="top-right" />
-          <LoginPage 
-            onSignIn={async (email, password, shopToken) => {
-              await signIn(email, password, shopToken);
-            }}
-            onSwitchToSignUp={() => setAuthMode('signup')}
-          />
-        </>
-      );
-    } else {
-      return (
-        <>
-          <Toaster position="top-right" />
-          <SignUpPage 
-            onSignUp={async (email, password, name, storeName, storeAddress, storePhone, mode, existingToken) => {
-              const result = await signUp(email, password, name, storeName, storeAddress, storePhone, mode, existingToken);
-              // Mark that account was just created to show token modal after login
-              if (mode === 'create') {
-                setJustCreatedAccount(true);
-              }
-              // Return the result so SignUpPage can access shopToken
-              return result;
-            }}
-            onSwitchToLogin={() => setAuthMode('login')}
-          />
-        </>
-      );
-    }
-  }
+  // Modo loja única: sem autenticação, segue para a aplicação principal
 
   // User is authenticated - show main application
   return (
@@ -1075,8 +1004,8 @@ export default function App() {
           onOpenChange={setIsServiceOrderModalOpen}
           technicians={technicians.map(t => ({ id: t.id, name: t.name, createdAt: t.created_at }))}
           stockParts={stockParts}
-          activeTechnicianId={user?.id || null}
-          activeTechnicianName={user?.technicianName || null}
+          activeTechnicianId={null}
+          activeTechnicianName={null}
           preSelectedClient={preSelectedClient}
           onSuccess={() => {
             setPreSelectedClient(null);
@@ -1201,14 +1130,7 @@ export default function App() {
           serviceOrder={selectedServiceOrder}
           onStatusChange={handleConfirmStatusChange}
         />
-        <ShopTokenModal
-          open={isShopTokenModalOpen}
-          onOpenChange={setIsShopTokenModalOpen}
-          shopToken={user?.shopToken || null}
-          shopName={user?.storeName || "Loja"}
-          userEmail={user?.email || ""}
-          onConfirmLogout={handleConfirmLogout}
-        />
+        {/* ShopTokenModal removido no modo loja única */}
         
         {/* Sale Invoice Modal - Open nota fiscal directly for sales */}
         {saleInvoiceOrder && saleInvoiceModalType === "invoice" && (() => {
@@ -1250,79 +1172,7 @@ export default function App() {
           );
         })()}
         
-        {/* Initial Token Modal - shown after first account creation */}
-        <Dialog open={showInitialTokenModal} onOpenChange={setShowInitialTokenModal}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Key className="w-5 h-5 text-[#8b7355]" />
-                Bem-vindo ao SIGLE Systems!
-              </DialogTitle>
-              <DialogDescription>
-                Sua conta foi criada com sucesso. Este é o token único da sua loja.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {/* Shop Information */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-800">
-                  <strong>Loja:</strong> {user?.storeName || "Sua Loja"}
-                </p>
-                <p className="text-xs text-blue-700 mt-1">
-                  <strong>E-mail:</strong> {user?.email}
-                </p>
-              </div>
-
-              {/* Token Display */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800 mb-3">
-                  🔑 <strong>Token da Loja:</strong>
-                </p>
-                <div className="bg-white border border-gray-300 rounded p-3 font-mono text-sm break-all">
-                  {user?.shopToken || "Token não disponível"}
-                </div>
-              </div>
-
-              {/* Important Note */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-xs text-red-800">
-                  ⚠️ <strong>IMPORTANTE:</strong> Guarde este token em local seguro! Você e outros membros da equipe precisarão dele para fazer login no sistema.
-                </p>
-              </div>
-
-              {/* Info about accessing token later */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="text-xs text-green-800">
-                  💡 <strong>Dica:</strong> Você pode acessar este token novamente clicando em <strong>"Sair"</strong> na barra lateral direita. Lá você também poderá copiá-lo ou enviá-lo por e-mail.
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    if (user?.shopToken) {
-                      navigator.clipboard.writeText(user.shopToken);
-                      toast.success("Token copiado para a área de transferência!");
-                    }
-                  }}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copiar Token
-                </Button>
-                <Button
-                  onClick={() => setShowInitialTokenModal(false)}
-                  className="flex-1 bg-[#8b7355] hover:bg-[#7a6345]"
-                >
-                  Entendi!
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        {/* Modal inicial de token removido no modo loja única */}
         
         {/* Confirm Dialog */}
         <ConfirmDialog
