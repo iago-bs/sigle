@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
+import { DEFAULT_SHOP_TOKEN } from '../lib/constants';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import type { Equipment } from '../types';
 import { calculateWarrantyEndDate } from '../lib/date-utils';
@@ -14,15 +15,11 @@ export function useEquipments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const shopToken = user?.shopToken;
+  const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
   // Buscar equipamentos
   const fetchEquipments = useCallback(async () => {
-    if (!shopToken) {
-      setEquipments([]);
-      setLoading(false);
-      return;
-    }
+    // Modo loja única: usa token padrão e segue normalmente
 
     try {
       setLoading(true);
@@ -108,9 +105,7 @@ export function useEquipments() {
     serialNumber?: string;
     notes?: string;
   }): Promise<any> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments`,

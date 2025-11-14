@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { DEFAULT_SHOP_TOKEN } from '../lib/constants';
 import { useAuth } from './useAuth';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import type { ServiceOrder } from '../types';
@@ -29,7 +30,7 @@ export function useServiceOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const shopToken = user?.shopToken;
+  const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
   // Função para mapear campos do banco para formato legacy
   const mapServiceOrder = (order: any): ServiceOrder => {
@@ -55,11 +56,7 @@ export function useServiceOrders() {
 
   // Buscar ordens de serviço
   const fetchServiceOrders = useCallback(async () => {
-    if (!shopToken) {
-      setServiceOrders([]);
-      setLoading(false);
-      return;
-    }
+    // Modo loja única: sempre usa token padrão
 
     try {
       setLoading(true);
@@ -93,9 +90,7 @@ export function useServiceOrders() {
 
   // Criar ordem de serviço
   const createServiceOrder = useCallback(async (orderData: ServiceOrderInput): Promise<ServiceOrder> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/service-orders`,
@@ -128,9 +123,7 @@ export function useServiceOrders() {
 
   // Atualizar ordem de serviço
   const updateServiceOrder = useCallback(async (id: string, updates: Partial<ServiceOrderInput>): Promise<ServiceOrder> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/service-orders/${id}`,
@@ -165,9 +158,7 @@ export function useServiceOrders() {
 
   // Completar O.S
   const completeServiceOrder = useCallback(async (id: string, totalValue: number): Promise<ServiceOrder> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/service-orders/${id}/complete`,
@@ -197,9 +188,7 @@ export function useServiceOrders() {
 
   // Marcar como entregue
   const deliverServiceOrder = useCallback(async (id: string): Promise<ServiceOrder> => {
-    if (!shopToken) {
-      throw new Error('Usuário não autenticado');
-    }
+    // Modo loja única: token padrão já aplicado
 
     const response = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/service-orders/${id}/deliver`,

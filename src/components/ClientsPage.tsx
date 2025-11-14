@@ -25,7 +25,7 @@ interface ClientsPageProps {
 }
 
 export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
-  const { clients, loading, inactivateClient } = useClients();
+  const { clients, loading, inactivateClient, fetchClients } = useClients();
   const { technicians } = useTechnicians();
   const { stockParts } = useParts();
   const [searchQuery, setSearchQuery] = useState("");
@@ -208,6 +208,10 @@ export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
       <AddClientModal
         open={showAddModal}
         onOpenChange={setShowAddModal}
+        onSuccess={() => {
+          // Recarrega a lista do hook desta página após criar
+          fetchClients(false);
+        }}
         onSuccessAndCreateOS={(client) => {
           setPreSelectedClient(client);
           setShowServiceOrderModal(true);

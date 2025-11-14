@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
+import { DEFAULT_SHOP_TOKEN } from '../lib/constants';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 export interface Technician {
@@ -19,15 +20,11 @@ export function useTechnicians() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const shopToken = user?.shopToken;
+  const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
   // Buscar técnicos
   const fetchTechnicians = useCallback(async () => {
-    if (!shopToken) {
-      setTechnicians([]);
-      setLoading(false);
-      return;
-    }
+    // Modo loja única: usa token padrão e segue normalmente
 
     try {
       setLoading(true);
