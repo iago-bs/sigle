@@ -1,0 +1,1388 @@
+import { Hono } from "npm:hono";
+import { cors } from "npm:hono/cors";
+import { logger } from "npm:hono/logger";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import * as db from "./database.ts";
+import * as emailService from "./email.ts";
+
+const app = new Hono();
+
+// Enable logger
+app.use('*', logger(console.log));
+
+// Enable CORS for all routes and methods
+app.use(
+  "/*",
+  cors({
+    origin: "*",
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+  }),
+);
+
+// Health check endpoint
+app.get("/make-server-9bef0ec0/health", (c) => {
+  return c.json({ status: "ok" });
+});
+
+// Diagnostic endpoint for Supabase connection
+app.get("/make-server-9bef0ec0/diagnostic", async (c) => {
+  try {
+    console.log('[DIAGNOSTIC] Starting diagnostic...');
+    
+    // Check environment variables
+    const hasUrl = !!Deno.env.get('SUPABASE_URL');
+    const hasKey = !!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    console.log('[DIAGNOSTIC] Env vars - URL:', hasUrl, 'KEY:', hasKey);
+    
+    if (!hasUrl || !hasKey) {
+      return c.json({
+        error: 'Missing environment variables',
+        has_url: hasUrl,
+        has_key: hasKey
+      }, 500);
+    }
+    
+    // Try to get Supabase client
+    console.log('[DIAGNOSTIC] Getting Supabase client...');
+    const supabase = db.getSupabaseClient();
+    
+    // Try a simple query
+    console.log('[DIAGNOSTIC] Testing query on equipments_manual...');
+    const { data, error } = await supabase
+      .from('equipments_manual')
+      .select('count')
+      .limit(1);
+    
+    if (error) {
+      console.log('[DIAGNOSTIC] Query error:', error);
+      return c.json({
+        status: 'error',
+        error_code: error.code,
+        error_message: error.message,
+        table_exists: false
+      });
+    }
+    
+    console.log('[DIAGNOSTIC] Success!');
+    return c.json({
+      status: 'ok',
+      table_exists: true,
+      has_data: data && data.length > 0
+    });
+    
+  } catch (err) {
+    console.log('[DIAGNOSTIC] Exception:', err);
+    return c.json({
+      status: 'error',
+      exception: String(err),
+      stack: err instanceof Error ? err.stack : undefined
+    }, 500);
+  }
+});
+
+// Check columns in clients table
+app.get("/make-server-9bef0ec0/check-columns", async (c) => {
+  try {
+    const supabase = db.getSupabaseClient();
+    
+    // Query information_schema to get actual columns
+    const { data, error } = await supabase.rpc('get_table_columns', {
+      table_name: 'clients'
+    });
+    
+    // If RPC doesn't exist, try a simpler approach
+    if (error) {
+      // Try to select with all expected columns
+      const testQuery = await supabase
+        .from('clients')
+        .select('id, shop_token, name, phone, whatsapp, email, cpf, address, city, state, is_active, created_at, updated_at')
+        .limit(1);
+      
+      if (testQuery.error) {
+        return c.json({
+          error: 'Column check failed',
+          message: testQuery.error.message,
+          missingColumns: testQuery.error.message.includes('city') ? ['city', 'state'] : [],
+          instructions: 'Execute: ALTER TABLE clients ADD COLUMN city TEXT, ADD COLUMN state TEXT;'
+        });
+      }
+      
+      return c.json({
+        success: true,
+        message: 'All required columns exist',
+        columns: ['id', 'shop_token', 'name', 'phone', 'whatsapp', 'email', 'cpf', 'address', 'city', 'state', 'is_active', 'created_at', 'updated_at']
+      });
+    }
+    
+    return c.json({ success: true, columns: data });
+    
+  } catch (error) {
+    return c.json({ 
+      error: 'Exception during column check',
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Test database connection and table structure
+app.get("/make-server-9bef0ec0/test-db", async (c) => {
+  try {
+    const supabase = db.getSupabaseClient();
+    
+    // Test 1: Check if clients table exists
+    const { data: tables, error: tablesError } = await supabase
+      .from('clients')
+      .select('*')
+      .limit(1);
+    
+    if (tablesError) {
+      return c.json({ 
+        error: 'Clients table error',
+        details: tablesError,
+        message: tablesError.message
+      });
+    }
+    
+    // Test 2: Try to insert a test client
+    const testClient = {
+      shop_token: 'test-token-' + Date.now(),
+      name: 'Test Client',
+      phone: '77999999999',
+      city: 'Vitória da Conquista',
+      state: 'BA',
+      is_active: true
+    };
+    
+    const { data: insertData, error: insertError } = await supabase
+      .from('clients')
+      .insert(testClient)
+      .select()
+      .single();
+    
+    if (insertError) {
+      return c.json({ 
+        error: 'Insert test failed',
+        details: insertError,
+        message: insertError.message,
+        hint: insertError.hint,
+        code: insertError.code,
+        solution: insertError.message?.includes('city') 
+          ? 'Execute: ALTER TABLE clients ADD COLUMN city TEXT, ADD COLUMN state TEXT; e depois RECARREGUE A PÁGINA'
+          : 'Verifique os logs do servidor'
+      });
+    }
+    
+    // Clean up test data
+    if (insertData?.id) {
+      await supabase.from('clients').delete().eq('id', insertData.id);
+    }
+    
+    return c.json({ 
+      success: true,
+      message: 'Database test passed - All columns exist and working!',
+      testData: insertData
+    });
+    
+  } catch (error) {
+    return c.json({ 
+      error: 'Exception during test',
+      details: error,
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Check if store name is available
+app.post("/make-server-9bef0ec0/check-store-name", async (c) => {
+  try {
+    const { storeName } = await c.req.json();
+
+    if (!storeName) {
+      return c.json({ 
+        error: "Nome da loja é obrigatório" 
+      }, 400);
+    }
+
+    // Check if store name already exists
+    const existingStore = await db.getShopByName(storeName);
+
+    if (existingStore) {
+      return c.json({ 
+        available: false,
+        message: "Este nome de loja já está sendo usado por outra empresa" 
+      });
+    }
+
+    return c.json({ 
+      available: true,
+      message: "Nome de loja disponível" 
+    });
+
+  } catch (error) {
+    console.log(`Check store name endpoint error: ${error}`);
+    return c.json({ 
+      error: "Erro ao verificar nome da loja" 
+    }, 500);
+  }
+});
+
+// Validate shop token (for joining existing store)
+app.post("/make-server-9bef0ec0/validate-shop-token", async (c) => {
+  try {
+    const { shopToken } = await c.req.json();
+
+    if (!shopToken) {
+      return c.json({ 
+        error: "Token da loja é obrigatório" 
+      }, 400);
+    }
+
+    // Check if shop exists
+    const shopInfo = await db.getShopByToken(shopToken);
+
+    if (!shopInfo) {
+      return c.json({ 
+        valid: false,
+        error: "Token inválido ou loja não encontrada" 
+      }, 404);
+    }
+
+    return c.json({ 
+      valid: true,
+      shop: shopInfo
+    });
+
+  } catch (error) {
+    console.log(`Validate shop token endpoint error: ${error}`);
+    return c.json({ 
+      error: "Erro ao validar token da loja" 
+    }, 500);
+  }
+});
+
+// Sign up endpoint - creates user with auto-confirmed email and generates/uses shop token
+app.post("/make-server-9bef0ec0/signup", async (c) => {
+  try {
+    const { 
+      email, 
+      password, 
+      name, 
+      storeName, 
+      storeAddress, 
+      storePhone,
+      mode,           // "create" or "join"
+      existingToken   // Only required if mode is "join"
+    } = await c.req.json();
+
+    if (!email || !password || !name) {
+      return c.json({ 
+        error: "Email, senha e nome são obrigatórios" 
+      }, 400);
+    }
+
+    if (!mode || (mode !== "create" && mode !== "join")) {
+      return c.json({ 
+        error: "Modo inválido. Use 'create' ou 'join'" 
+      }, 400);
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    let shopToken: string;
+    let shopInfo: any;
+
+    if (mode === "create") {
+      // Creating a new store
+      if (!storeName || !storeAddress || !storePhone) {
+        return c.json({ 
+          error: "Dados do estabelecimento são obrigatórios para criar nova loja" 
+        }, 400);
+      }
+
+      // Check if store name already exists
+      const existingStore = await db.getShopByName(storeName);
+      if (existingStore) {
+        return c.json({ 
+          error: "Este nome de loja já está sendo usado por outra empresa" 
+        }, 400);
+      }
+
+      // Generate unique shop token (UUID)
+      shopToken = crypto.randomUUID();
+
+      // Create shop in database
+      shopInfo = await db.createShop({
+        shop_token: shopToken,
+        name: storeName,
+        address: storeAddress,
+        phone: storePhone,
+        owner_email: email,
+      });
+
+      console.log(`Created new store: ${storeName} with token: ${shopToken}`);
+
+    } else {
+      // Joining an existing store
+      if (!existingToken) {
+        return c.json({ 
+          error: "Token da loja é obrigatório para se juntar a uma loja existente" 
+        }, 400);
+      }
+
+      shopToken = existingToken;
+
+      // Verify that shop exists
+      shopInfo = await db.getShopByToken(shopToken);
+      if (!shopInfo) {
+        return c.json({ 
+          error: "Token inválido ou loja não encontrada" 
+        }, 404);
+      }
+
+      console.log(`User ${email} joining existing store: ${shopInfo.name}`);
+    }
+
+    // Check if user already exists
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find(u => u.email === email);
+
+    let userData;
+
+    if (existingUser) {
+      // User already exists - update their metadata
+      console.log(`User ${email} already exists, updating metadata for store: ${shopInfo.name}`);
+      
+      const { data: updateData, error: updateError } = await supabase.auth.admin.updateUserById(
+        existingUser.id,
+        {
+          user_metadata: { 
+            name,
+            storeName: shopInfo.name,
+            storeAddress: shopInfo.address,
+            storePhone: shopInfo.phone,
+            shopToken,
+            role: mode === "create" ? 'owner' : 'technician'
+          }
+        }
+      );
+
+      if (updateError) {
+        console.log(`Error updating user ${email}: ${updateError.message}`);
+        return c.json({ 
+          error: "Erro ao atualizar usuário existente" 
+        }, 400);
+      }
+
+      userData = updateData.user;
+      console.log(`Successfully updated user: ${email} for store: ${shopInfo.name}`);
+    } else {
+      // Create new user with auto-confirmed email since email server hasn't been configured
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: { 
+          name,
+          storeName: shopInfo.name,
+          storeAddress: shopInfo.address,
+          storePhone: shopInfo.phone,
+          shopToken,
+          role: mode === "create" ? 'owner' : 'technician'
+        },
+        email_confirm: true
+      });
+
+      if (error) {
+        console.log(`Signup error for email ${email}: ${error.message}`);
+        return c.json({ 
+          error: error.message 
+        }, 400);
+      }
+
+      userData = data.user;
+      console.log(`Successfully created user: ${email} for store: ${shopInfo.name} with token: ${shopToken}`);
+    }
+    
+    return c.json({ 
+      success: true,
+      user: userData,
+      shopToken: shopToken,
+      mode: mode
+    });
+
+  } catch (error) {
+    console.log(`Signup endpoint error: ${error}`);
+    return c.json({ 
+      error: "Erro ao criar usuário" 
+    }, 500);
+  }
+});
+
+// Verify shop token endpoint
+app.post("/make-server-9bef0ec0/verify-shop-token", async (c) => {
+  try {
+    const { email, shopToken } = await c.req.json();
+
+    if (!email || !shopToken) {
+      return c.json({ 
+        error: "Email e token da loja são obrigatórios" 
+      }, 400);
+    }
+
+    // Get shop information
+    const shopInfo = await db.getShopByToken(shopToken);
+
+    if (!shopInfo) {
+      return c.json({ 
+        error: "Token da loja inválido" 
+      }, 404);
+    }
+
+    return c.json({ 
+      success: true,
+      shop: shopInfo
+    });
+
+  } catch (error) {
+    console.log(`Verify shop token endpoint error: ${error}`);
+    return c.json({ 
+      error: "Erro ao verificar token da loja" 
+    }, 500);
+  }
+});
+
+// Send shop token via email using Resend
+app.post("/make-server-9bef0ec0/send-token-email", async (c) => {
+  try {
+    // Parse request body with error handling
+    let email, shopToken, shopName;
+    try {
+      const body = await c.req.json();
+      email = body.email;
+      shopToken = body.shopToken;
+      shopName = body.shopName;
+    } catch (parseError) {
+      console.log('Error parsing request body:', parseError);
+      return c.json({ 
+        success: false,
+        message: "Erro ao processar requisição. Por favor, copie o token manualmente.",
+        showCopyOption: true
+      }, 200);
+    }
+
+    if (!email || !shopToken) {
+      return c.json({ 
+        success: false,
+        error: "Email e token são obrigatórios" 
+      }, 400);
+    }
+
+    // Get Resend API Key from environment with error handling
+    let resendApiKey;
+    try {
+      resendApiKey = Deno.env.get('RESEND_API_KEY');
+    } catch (envError) {
+      console.log('Error accessing environment variables:', envError);
+      return c.json({ 
+        success: false,
+        message: "Serviço de email não configurado. Por favor, copie o token manualmente.",
+        showCopyOption: true
+      }, 200);
+    }
+    
+    if (!resendApiKey) {
+      console.log('RESEND_API_KEY not configured - returning graceful error');
+      return c.json({ 
+        success: false,
+        message: "Serviço de email não configurado. Por favor, copie o token manualmente.",
+        showCopyOption: true
+      }, 200); // Return 200 instead of 500 for graceful degradation
+    }
+
+    // Send email using Resend API
+    const emailResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: 'SIGLE Systems <onboarding@resend.dev>',
+        to: [email],
+        subject: `Token de Acesso - ${shopName || 'SIGLE Systems'}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">SIGLE Systems</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Sistema de Gerenciamento de Lojas de Eletrônicos</p>
+              </div>
+              
+              <div style="background: #ffffff; padding: 40px 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
+                <h2 style="color: #667eea; margin-top: 0;">Token de Acesso da Sua Loja</h2>
+                
+                <p>Olá!</p>
+                
+                <p>Aqui está o token único da sua loja no SIGLE Systems:</p>
+                
+                <div style="background: #f5f5f5; border-left: 4px solid #667eea; padding: 20px; margin: 25px 0; border-radius: 4px;">
+                  <p style="margin: 0 0 10px 0;"><strong>Loja:</strong> ${shopName || 'Não informado'}</p>
+                  <p style="margin: 0;"><strong>Token:</strong></p>
+                  <div style="background: white; padding: 15px; margin-top: 10px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 14px; word-break: break-all; border: 1px dashed #667eea;">
+                    ${shopToken}
+                  </div>
+                </div>
+                
+                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 25px 0; border-radius: 4px;">
+                  <p style="margin: 0; color: #856404;"><strong>⚠️ Importante:</strong></p>
+                  <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #856404;">
+                    <li>Guarde este token com segurança</li>
+                    <li>Você precisará dele para acessar o sistema</li>
+                    <li>Este token é único e imutável</li>
+                    <li>Compartilhe apenas com membros autorizados da sua equipe</li>
+                  </ul>
+                </div>
+                
+                <p style="margin-top: 30px;">Se você tiver alguma dúvida ou precisar de ajuda, entre em contato conosco.</p>
+                
+                <p style="margin-bottom: 0;">Atenciosamente,<br><strong>Equipe SIGLE Systems</strong></p>
+              </div>
+              
+              <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+                <p style="margin: 0;">© ${new Date().getFullYear()} SIGLE Systems. Todos os direitos reservados.</p>
+                <p style="margin: 10px 0 0 0;">Este é um email automático, por favor não responda.</p>
+              </div>
+            </body>
+          </html>
+        `,
+      }),
+    });
+
+    const result = await emailResponse.json();
+
+    if (!emailResponse.ok) {
+      console.log(`Resend API error: ${JSON.stringify(result)}`);
+      return c.json({ 
+        success: false,
+        error: "Erro ao enviar email. Tente novamente mais tarde.",
+      }, 500);
+    }
+
+    console.log(`Email sent successfully to ${email}. Resend ID: ${result.id}`);
+    
+    return c.json({ 
+      success: true,
+      message: "Token enviado com sucesso para o email cadastrado!",
+      emailId: result.id
+    });
+
+  } catch (error) {
+    console.log(`Send token email endpoint error: ${error}`);
+    // Return graceful error instead of 500
+    return c.json({ 
+      success: false,
+      message: "O serviço de email está sendo configurado. Por favor, copie o token manualmente.",
+      showCopyOption: true,
+      error: String(error)
+    }, 200); // Changed to 200 for graceful degradation
+  }
+});
+
+// List technicians endpoint
+app.get("/make-server-9bef0ec0/technicians", async (c) => {
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+
+    // Get all users using admin API
+    const { data: { users }, error } = await supabase.auth.admin.listUsers();
+
+    if (error) {
+      console.log(`List technicians error: ${error.message}`);
+      return c.json({ 
+        error: error.message 
+      }, 400);
+    }
+
+    const technicians = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || user.email?.split('@')[0] || 'Sem nome',
+      created_at: user.created_at,
+    }));
+
+    return c.json({ 
+      success: true,
+      technicians 
+    });
+
+  } catch (error) {
+    console.log(`List technicians endpoint error: ${error}`);
+    return c.json({ 
+      error: "Erro ao listar técnicos" 
+    }, 500);
+  }
+});
+
+// ============================================
+// CLIENTS ENDPOINTS
+// ============================================
+
+// Get all clients
+app.get("/make-server-9bef0ec0/clients", async (c) => {
+  try {
+    const shopToken = c.req.query('shopToken');
+    const includeInactive = c.req.query('includeInactive') === 'true';
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    const clients = await db.getClients(shopToken, includeInactive);
+
+    return c.json({ success: true, clients });
+
+  } catch (error) {
+    console.log(`Get clients error: ${error}`);
+    return c.json({ error: "Erro ao buscar clientes" }, 500);
+  }
+});
+
+// Create client
+app.post("/make-server-9bef0ec0/clients", async (c) => {
+  try {
+    const { shopToken, name, phone, whatsapp, email, cpf, address, city, state } = await c.req.json();
+
+    console.log('Create client request:', { shopToken, name, phone, whatsapp, email, cpf, address, city, state });
+
+    if (!shopToken || !name || !phone) {
+      console.log('Missing required fields:', { shopToken, name, phone });
+      return c.json({ error: "Campos obrigatórios faltando" }, 400);
+    }
+
+    const client = await db.insertClient({
+      shop_token: shopToken,
+      name,
+      phone,
+      whatsapp,
+      email,
+      cpf,
+      address,
+      city,
+      state,
+      is_active: true,
+    });
+
+    console.log('Client created successfully:', client.id);
+    return c.json({ success: true, client });
+
+  } catch (error) {
+    console.log('Create client error details:', error);
+    console.log('Error type:', typeof error);
+    console.log('Error keys:', error ? Object.keys(error) : 'null');
+    
+    let errorMessage = 'Erro desconhecido';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      console.log('Error message:', error.message);
+      console.log('Error stack:', error.stack);
+    } else if (typeof error === 'object' && error !== null) {
+      errorMessage = JSON.stringify(error);
+      console.log('Error object:', JSON.stringify(error, null, 2));
+    }
+    
+    return c.json({ error: `Erro ao criar cliente: ${errorMessage}` }, 500);
+  }
+});
+
+// Update client
+app.put("/make-server-9bef0ec0/clients/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const updates = await c.req.json();
+
+    const client = await db.updateClient(id, updates);
+
+    return c.json({ success: true, client });
+
+  } catch (error) {
+    console.log(`Update client error: ${error}`);
+    return c.json({ error: "Erro ao atualizar cliente" }, 500);
+  }
+});
+
+// Inactivate client (soft delete)
+app.post("/make-server-9bef0ec0/clients/:id/inactivate", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const client = await db.updateClient(id, { is_active: false });
+
+    return c.json({ success: true, client });
+
+  } catch (error) {
+    console.log(`Inactivate client error: ${error}`);
+    return c.json({ error: "Erro ao inativar cliente" }, 500);
+  }
+});
+
+// Reactivate client
+app.post("/make-server-9bef0ec0/clients/:id/reactivate", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const client = await db.updateClient(id, { is_active: true });
+
+    return c.json({ success: true, client });
+
+  } catch (error) {
+    console.log(`Reactivate client error: ${error}`);
+    return c.json({ error: "Erro ao reativar cliente" }, 500);
+  }
+});
+
+// Delete client permanently
+app.delete("/make-server-9bef0ec0/clients/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    await db.deleteClient(id);
+
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete client error: ${error}`);
+    return c.json({ error: "Erro ao deletar cliente" }, 500);
+  }
+});
+
+// ============================================
+// SERVICE ORDERS ENDPOINTS
+// ============================================
+
+// Get all service orders
+app.get("/make-server-9bef0ec0/service-orders", async (c) => {
+  try {
+    const shopToken = c.req.query('shopToken');
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    const serviceOrders = await db.getServiceOrders(shopToken);
+
+    return c.json({ success: true, serviceOrders });
+
+  } catch (error) {
+    console.log(`Get service orders error: ${error}`);
+    return c.json({ error: "Erro ao buscar ordens de serviço" }, 500);
+  }
+});
+
+// Create service order
+app.post("/make-server-9bef0ec0/service-orders", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken } = data;
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    // Get all service orders to generate OS number
+    const existingOrders = await db.getServiceOrders(shopToken);
+    const osNumber = `OS-${String(existingOrders.length + 1).padStart(6, '0')}`;
+
+    const serviceOrder = await db.createServiceOrder({
+      shop_token: shopToken,
+      os_number: osNumber,
+      client_id: data.client_id,
+      client_name: data.client_name,
+      client_phone: data.client_phone,
+      client_whatsapp: data.client_whatsapp,
+      equipment_type: data.equipment_type,
+      equipment_brand: data.equipment_brand,
+      equipment_model: data.equipment_model,
+      defect: data.defect,
+      observations: data.observations,
+      technician_id: data.technician_id,
+      technician_name: data.technician_name,
+      status: data.status || 'pending',
+      priority: data.priority || 'normal',
+      entry_date: new Date().toISOString(),
+      estimated_delivery_date: data.estimated_delivery_date,
+      warranty_months: 3,
+      total_value: 0,
+    });
+
+    // Atualizar tabela de equipamentos com estatísticas
+    if (data.equipment_type) {
+      try {
+        console.log(`📊 Atualizando estatísticas de equipamento: ${data.equipment_type}`);
+        
+        // Buscar equipamento existente
+        const existingEquipment = await db.getEquipmentByType(shopToken, data.equipment_type);
+        
+        if (existingEquipment) {
+          // Equipamento já existe - atualizar contador e issues
+          const updatedCount = existingEquipment.count + 1;
+          const updatedIssues = [...(existingEquipment.common_issues || [])];
+          
+          // Adicionar ou incrementar o defeito
+          if (data.defect) {
+            const existingIssueIndex = updatedIssues.findIndex(
+              issue => issue.issue.toLowerCase() === data.defect.toLowerCase()
+            );
+            
+            if (existingIssueIndex >= 0) {
+              updatedIssues[existingIssueIndex].count += 1;
+            } else {
+              updatedIssues.push({ issue: data.defect, count: 1 });
+            }
+          }
+          
+          // Ordenar issues por count (mais comum primeiro)
+          updatedIssues.sort((a, b) => b.count - a.count);
+          
+          await db.upsertEquipment({
+            shop_token: shopToken,
+            type: data.equipment_type,
+            count: updatedCount,
+            common_issues: updatedIssues,
+          });
+          
+          console.log(`✅ Equipamento atualizado: ${data.equipment_type} (${updatedCount} total)`);
+        } else {
+          // Equipamento novo - criar registro
+          await db.upsertEquipment({
+            shop_token: shopToken,
+            type: data.equipment_type,
+            count: 1,
+            common_issues: data.defect ? [{ issue: data.defect, count: 1 }] : [],
+          });
+          
+          console.log(`✅ Novo equipamento criado: ${data.equipment_type}`);
+        }
+      } catch (equipmentError) {
+        // Não falhar a criação da O.S se houver erro ao atualizar equipamentos
+        console.error(`⚠️ Erro ao atualizar equipamentos (não crítico): ${equipmentError}`);
+      }
+    }
+
+    return c.json({ success: true, serviceOrder });
+
+  } catch (error) {
+    console.log(`Create service order error: ${error}`);
+    return c.json({ error: "Erro ao criar ordem de serviço" }, 500);
+  }
+});
+
+// Update service order
+app.put("/make-server-9bef0ec0/service-orders/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const updates = await c.req.json();
+
+    const serviceOrder = await db.updateServiceOrder(id, updates);
+
+    return c.json({ success: true, serviceOrder });
+
+  } catch (error) {
+    console.log(`Update service order error: ${error}`);
+    return c.json({ error: "Erro ao atualizar ordem de serviço" }, 500);
+  }
+});
+
+// Complete service order
+app.post("/make-server-9bef0ec0/service-orders/:id/complete", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { totalValue } = await c.req.json();
+
+    const serviceOrder = await db.updateServiceOrder(id, {
+      status: 'completed',
+      completion_date: new Date().toISOString(),
+      total_value: totalValue,
+    });
+
+    return c.json({ success: true, serviceOrder });
+
+  } catch (error) {
+    console.log(`Complete service order error: ${error}`);
+    return c.json({ error: "Erro ao completar ordem de serviço" }, 500);
+  }
+});
+
+// Deliver service order
+app.post("/make-server-9bef0ec0/service-orders/:id/deliver", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    const serviceOrder = await db.updateServiceOrder(id, {
+      delivery_date: new Date().toISOString(),
+    });
+
+    return c.json({ success: true, serviceOrder });
+
+  } catch (error) {
+    console.log(`Deliver service order error: ${error}`);
+    return c.json({ error: "Erro ao marcar como entregue" }, 500);
+  }
+});
+
+// Delete service order
+app.delete("/make-server-9bef0ec0/service-orders/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    await db.deleteServiceOrder(id);
+
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete service order error: ${error}`);
+    return c.json({ error: "Erro ao deletar ordem de serviço" }, 500);
+  }
+});
+
+// ============================================
+// PARTS ENDPOINTS
+// ============================================
+
+// Get all parts
+app.get("/make-server-9bef0ec0/parts", async (c) => {
+  try {
+    const shopToken = c.req.query('shopToken');
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    const parts = await db.getParts(shopToken);
+
+    return c.json({ success: true, parts });
+
+  } catch (error) {
+    console.log(`Get parts error: ${error}`);
+    return c.json({ error: "Erro ao buscar peças" }, 500);
+  }
+});
+
+// Create part
+app.post("/make-server-9bef0ec0/parts", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken } = data;
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    const part = await db.createPart({
+      shop_token: shopToken,
+      service_order_id: data.service_order_id,
+      os_number: data.os_number,
+      client_name: data.client_name,
+      equipment_type: data.equipment_type,
+      technician_name: data.technician_name,
+      name: data.name,
+      quantity: data.quantity,
+      unit_price: data.unit_price,
+      total_price: data.total_price,
+      supplier: data.supplier,
+      status: data.status || 'pending',
+      estimated_arrival_date: data.estimated_arrival_date,
+      notes: data.notes,
+    });
+
+    return c.json({ success: true, part });
+
+  } catch (error) {
+    console.log(`Create part error: ${error}`);
+    return c.json({ error: "Erro ao criar peça" }, 500);
+  }
+});
+
+// Update part
+app.put("/make-server-9bef0ec0/parts/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const updates = await c.req.json();
+
+    const part = await db.updatePart(id, updates);
+
+    return c.json({ success: true, part });
+
+  } catch (error) {
+    console.log(`Update part error: ${error}`);
+    return c.json({ error: "Erro ao atualizar peça" }, 500);
+  }
+});
+
+// Delete part
+app.delete("/make-server-9bef0ec0/parts/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+
+    await db.deletePart(id);
+
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete part error: ${error}`);
+    return c.json({ error: "Erro ao deletar peça" }, 500);
+  }
+});
+
+// ============================================
+// EQUIPMENTS ENDPOINTS
+// ============================================
+
+// Get all manual equipments
+app.get("/make-server-9bef0ec0/equipments", async (c) => {
+  try {
+    console.log('[GET /equipments] Starting request...');
+    const shopToken = c.req.query('shopToken');
+    console.log('[GET /equipments] shopToken:', shopToken);
+
+    if (!shopToken) {
+      console.log('[GET /equipments] No shop token provided');
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    console.log('[GET /equipments] Calling getManualEquipments...');
+    const equipments = await db.getManualEquipments(shopToken);
+    console.log('[GET /equipments] Success! Found', equipments.length, 'equipments');
+
+    // Debug: Log warranty data for sold equipments
+    const soldEquipments = equipments.filter(eq => eq.sold || eq.status === 'sold');
+    console.log('[GET /equipments] Sold equipments found:', soldEquipments.length);
+    soldEquipments.forEach(eq => {
+      console.log(`[GET /equipments] Sold equipment:`, {
+        id: eq.id,
+        device: eq.device,
+        sold: eq.sold,
+        sold_date: eq.sold_date,
+        warranty_end_date: eq.warranty_end_date,
+        status: eq.status
+      });
+    });
+
+    return c.json({ success: true, equipments });
+
+  } catch (error) {
+    console.log(`[GET /equipments] ERROR:`, error);
+    console.log(`[GET /equipments] ERROR type:`, typeof error);
+    console.log(`[GET /equipments] ERROR stack:`, error instanceof Error ? error.stack : 'No stack');
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    return c.json({ 
+      error: "Erro ao buscar equipamentos",
+      details: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    }, 500);
+  }
+});
+
+// (moved below)
+
+// Create equipment
+app.post("/make-server-9bef0ec0/equipments", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken } = data;
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    const equipment = await db.createManualEquipment({
+      shop_token: shopToken,
+      brand: data.brand,
+      model: data.model,
+      device: data.device,
+      serial_number: data.serialNumber,
+      notes: data.notes,
+    });
+
+    return c.json({ success: true, equipment });
+
+  } catch (error) {
+    console.log(`Create equipment error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    return c.json({ 
+      error: "Erro ao criar equipamento",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+
+
+// Mark equipment as sold
+app.post("/make-server-9bef0ec0/equipments/mark-as-sold", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken, equipmentId, soldDate, invoiceId } = data;
+
+    if (!shopToken || !equipmentId) {
+      return c.json({ error: "shopToken e equipmentId são obrigatórios" }, 400);
+    }
+
+    console.log(`[MARK_AS_SOLD] Marking equipment ${equipmentId} as sold for shop ${shopToken}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    // Calcular data de fim da garantia (3 meses após a venda)
+    const saleDate = new Date(soldDate || new Date().toISOString());
+    const warrantyEndDate = new Date(saleDate);
+    warrantyEndDate.setMonth(warrantyEndDate.getMonth() + 3);
+    
+    const { data: equipment, error } = await supabase
+      .from('equipments_manual')
+      .update({
+        sold: true,
+        sold_date: saleDate.toISOString(),
+        warranty_end_date: warrantyEndDate.toISOString(),
+        invoice_id: invoiceId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', equipmentId)
+      .eq('shop_token', shopToken)
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`[MARK_AS_SOLD] Error:`, error);
+      return c.json({ 
+        error: "Erro ao marcar equipamento como vendido",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[MARK_AS_SOLD] Equipment marked as sold successfully`);
+    return c.json({ success: true, equipment });
+
+  } catch (error) {
+    console.log(`Mark as sold error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    return c.json({ 
+      error: "Erro ao marcar equipamento como vendido",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// ============================================
+// EMAIL ENDPOINTS
+// ============================================
+
+// Send invoice email
+app.post("/make-server-9bef0ec0/send-invoice-email", async (c) => {
+  try {
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    
+    if (!resendApiKey) {
+      console.error('❌ RESEND_API_KEY não configurada');
+      return c.json({ 
+        error: 'Configuração de email não encontrada. Configure RESEND_API_KEY no Supabase.' 
+      }, 500);
+    }
+
+    const body = await c.req.json();
+    const {
+      to,
+      clientName,
+      osNumber,
+      deliveryDate,
+      totalValue,
+      paymentMethod,
+      warrantyEndDate,
+      parts,
+    } = body;
+
+    // Validar campos obrigatórios
+    if (!to || !clientName || !osNumber || totalValue === undefined) {
+      return c.json({ 
+        error: 'Campos obrigatórios: to, clientName, osNumber, totalValue' 
+      }, 400);
+    }
+
+    console.log(`📧 Enviando email de nota fiscal para: ${to}`);
+    
+    const result = await emailService.sendInvoiceEmail(resendApiKey, {
+      to,
+      clientName,
+      osNumber,
+      deliveryDate,
+      totalValue,
+      paymentMethod,
+      warrantyEndDate,
+      parts,
+    });
+
+    if (result.error) {
+      console.error('❌ Erro ao enviar email:', result.error);
+      return c.json({ 
+        error: `Erro ao enviar email: ${result.error.message || JSON.stringify(result.error)}` 
+      }, 500);
+    }
+
+    console.log('✅ Email de nota fiscal enviado com sucesso! ID:', result.id);
+    return c.json({ 
+      success: true, 
+      emailId: result.id,
+      message: 'Email enviado com sucesso!'
+    });
+
+  } catch (err) {
+    console.error('❌ Erro no servidor ao enviar email de nota fiscal:', err);
+    return c.json({ 
+      error: `Erro interno: ${String(err)}` 
+    }, 500);
+  }
+});
+
+// Send budget email
+app.post("/make-server-9bef0ec0/send-budget-email", async (c) => {
+  try {
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    
+    if (!resendApiKey) {
+      console.error('❌ RESEND_API_KEY não configurada');
+      return c.json({ 
+        error: 'Configuração de email não encontrada. Configure RESEND_API_KEY no Supabase.' 
+      }, 500);
+    }
+
+    const body = await c.req.json();
+    const {
+      to,
+      clientName,
+      osNumber,
+      totalValue,
+      parts,
+      observations,
+    } = body;
+
+    // Validar campos obrigatórios
+    if (!to || !clientName || !osNumber || totalValue === undefined) {
+      return c.json({ 
+        error: 'Campos obrigatórios: to, clientName, osNumber, totalValue' 
+      }, 400);
+    }
+
+    console.log(`📧 Enviando email de orçamento para: ${to}`);
+    
+    const result = await emailService.sendBudgetEmail(resendApiKey, {
+      to,
+      clientName,
+      osNumber,
+      totalValue,
+      parts,
+      observations,
+    });
+
+    if (result.error) {
+      console.error('❌ Erro ao enviar email:', result.error);
+      return c.json({ 
+        error: `Erro ao enviar email: ${result.error.message || JSON.stringify(result.error)}` 
+      }, 500);
+    }
+
+    console.log('✅ Email de orçamento enviado com sucesso! ID:', result.id);
+    return c.json({ 
+      success: true, 
+      emailId: result.id,
+      message: 'Email enviado com sucesso!'
+    });
+
+  } catch (err) {
+    console.error('❌ Erro no servidor ao enviar email de orçamento:', err);
+    return c.json({ 
+      error: `Erro interno: ${String(err)}` 
+    }, 500);
+  }
+});
+
+// Send service order created email
+app.post("/make-server-9bef0ec0/send-os-created-email", async (c) => {
+  try {
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    
+    if (!resendApiKey) {
+      console.error('❌ RESEND_API_KEY não configurada');
+      return c.json({ 
+        error: 'Configuração de email não encontrada. Configure RESEND_API_KEY no Supabase.' 
+      }, 500);
+    }
+
+    const body = await c.req.json();
+    const {
+      to,
+      clientName,
+      osNumber,
+      equipmentType,
+      equipmentBrand,
+      equipmentModel,
+      defect,
+      technicianName,
+      estimatedDeliveryDate,
+    } = body;
+
+    // Validar campos obrigatórios
+    if (!to || !clientName || !osNumber || !equipmentType || !defect) {
+      return c.json({ 
+        error: 'Campos obrigatórios: to, clientName, osNumber, equipmentType, defect' 
+      }, 400);
+    }
+
+    console.log(`📧 Enviando email de O.S criada para: ${to}`);
+    
+    const result = await emailService.sendServiceOrderCreatedEmail(resendApiKey, {
+      to,
+      clientName,
+      osNumber,
+      equipmentType,
+      equipmentBrand,
+      equipmentModel,
+      defect,
+      technicianName,
+      estimatedDeliveryDate,
+    });
+
+    if (result.error) {
+      console.error('❌ Erro ao enviar email:', result.error);
+      return c.json({ 
+        error: `Erro ao enviar email: ${result.error.message || JSON.stringify(result.error)}` 
+      }, 500);
+    }
+
+    console.log('✅ Email de O.S criada enviado com sucesso! ID:', result.id);
+    return c.json({ 
+      success: true, 
+      emailId: result.id,
+      message: 'Email enviado com sucesso!'
+    });
+
+  } catch (err) {
+    console.error('❌ Erro no servidor ao enviar email de O.S criada:', err);
+    return c.json({ 
+      error: `Erro interno: ${String(err)}` 
+    }, 500);
+  }
+});
+
+Deno.serve(app.fetch);

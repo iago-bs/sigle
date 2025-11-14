@@ -1,0 +1,445 @@
+/**
+ * SOLUÇÃO DEFINITIVA PARA IMPRESSÃO
+ * 
+ * Este arquivo contém todos os estilos de impressão do sistema.
+ * Funciona tanto no Electron quanto em navegadores web.
+ */
+
+/* ============================================
+   CONFIGURAÇÕES GLOBAIS DE IMPRESSÃO
+   ============================================ */
+@media print {
+  /* Configuração da página - Portrait por padrão */
+  @page {
+    margin: 0.5cm;
+    size: A4 portrait;
+  }
+  
+  /* Landscape para recibos (2 vias) */
+  @page :first {
+    size: A4 portrait;
+  }
+
+  /* Reset do body para impressão */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    font-family: monospace !important;
+  }
+
+  /* Esconder tudo que não é para imprimir */
+  body > *:not(.print-content) {
+    display: none !important;
+  }
+
+  /* Classes utilitárias */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Garantir cores e backgrounds sejam impressos */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Evitar quebras de página indesejadas */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  table, figure, img {
+    page-break-inside: avoid !important;
+  }
+
+  tr, td, th {
+    page-break-inside: avoid !important;
+  }
+
+  /* Garantir que bordas sejam visíveis */
+  table, td, th, div {
+    border-color: black !important;
+  }
+}
+
+/* ============================================
+   ESTILOS PARA NOTA FISCAL
+   ============================================ */
+@media print {
+  #invoice-print-content {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+    background: white !important;
+    border: 2px solid black !important;
+    box-sizing: border-box !important;
+  }
+
+  #invoice-print-content * {
+    visibility: visible !important;
+  }
+
+  /* Cabeçalho da nota fiscal */
+  #invoice-print-content h1 {
+    font-size: 18px !important;
+    margin-bottom: 2px !important;
+  }
+
+  #invoice-print-content h2 {
+    font-size: 14px !important;
+    margin-bottom: 4px !important;
+  }
+
+  /* Tabela de itens */
+  #invoice-print-content table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 11px !important;
+  }
+
+  #invoice-print-content table th,
+  #invoice-print-content table td {
+    padding: 4px !important;
+    border: 1px solid black !important;
+  }
+
+  #invoice-print-content table thead {
+    background-color: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+
+  #invoice-print-content table tfoot {
+    background-color: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+
+  /* Seções da nota */
+  #invoice-print-content > div {
+    margin-bottom: 8px !important;
+  }
+
+  /* Garantia */
+  #invoice-print-content .warranty-section {
+    background-color: #fffbf0 !important;
+    border: 2px solid black !important;
+    padding: 8px !important;
+  }
+
+  /* Textos pequenos */
+  #invoice-print-content .text-xs,
+  #invoice-print-content .text-sm {
+    font-size: 9px !important;
+  }
+
+  /* Assinaturas */
+  #invoice-print-content .signature-line {
+    border-top: 2px solid black !important;
+    padding-top: 4px !important;
+    margin-top: 20px !important;
+  }
+}
+
+/* ============================================
+   ESTILOS PARA ORDEM DE SERVIÇO
+   ============================================ */
+@media print {
+  #service-order-print-content {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 8px !important;
+    background: white !important;
+    border: 2px solid black !important;
+    box-sizing: border-box !important;
+  }
+
+  #service-order-print-content * {
+    visibility: visible !important;
+  }
+
+  /* Cabeçalho da O.S */
+  #service-order-print-content h1 {
+    font-size: 16px !important;
+    margin-bottom: 2px !important;
+  }
+
+  #service-order-print-content h2 {
+    font-size: 13px !important;
+    margin-bottom: 3px !important;
+  }
+
+  /* Grid de informações */
+  #service-order-print-content .grid {
+    display: grid !important;
+    gap: 4px !important;
+  }
+
+  /* Bordas das seções */
+  #service-order-print-content .border-2 {
+    border: 2px solid black !important;
+  }
+
+  #service-order-print-content .border {
+    border: 1px solid black !important;
+  }
+
+  /* Tabelas */
+  #service-order-print-content table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 10px !important;
+  }
+
+  #service-order-print-content table th,
+  #service-order-print-content table td {
+    padding: 3px !important;
+    border: 1px solid black !important;
+  }
+
+  /* Espaçamentos compactos */
+  #service-order-print-content .space-y-1 > * + * {
+    margin-top: 2px !important;
+  }
+
+  #service-order-print-content .space-y-2 > * + * {
+    margin-top: 4px !important;
+  }
+
+  /* Paddings compactos */
+  #service-order-print-content .p-1 {
+    padding: 2px !important;
+  }
+
+  #service-order-print-content .p-2 {
+    padding: 4px !important;
+  }
+
+  #service-order-print-content .p-3 {
+    padding: 6px !important;
+  }
+
+  #service-order-print-content .p-4 {
+    padding: 8px !important;
+  }
+
+  /* Margins compactos */
+  #service-order-print-content .mb-1 {
+    margin-bottom: 2px !important;
+  }
+
+  #service-order-print-content .mb-2 {
+    margin-bottom: 4px !important;
+  }
+
+  #service-order-print-content .mb-3 {
+    margin-bottom: 6px !important;
+  }
+
+  #service-order-print-content .mb-4 {
+    margin-bottom: 8px !important;
+  }
+}
+
+/* ============================================
+   ESTILOS PARA RECIBO (2 VIAS)
+   ============================================ */
+@media print {
+  /* Container do recibo (2 vias lado a lado) */
+  #receipt-print-content {
+    display: flex !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 297mm !important; /* A4 landscape width */
+    margin: 0 auto !important;
+    padding: 8px !important;
+    background: white !important;
+    box-sizing: border-box !important;
+    gap: 10px !important;
+  }
+
+  #receipt-print-content * {
+    visibility: visible !important;
+  }
+
+  /* Cada via do recibo (lado a lado) */
+  #receipt-print-content > div {
+    flex: 1 !important;
+    border: 2px solid black !important;
+    padding: 6px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Cabeçalho do recibo */
+  #receipt-print-content h1 {
+    font-size: 14px !important;
+    margin-bottom: 2px !important;
+  }
+
+  #receipt-print-content h2 {
+    font-size: 12px !important;
+    margin-bottom: 3px !important;
+  }
+
+  /* Linha tracejada de corte */
+  #receipt-print-content .cut-line {
+    border-top: 2px dashed black !important;
+    margin: 8px 0 !important;
+  }
+
+  /* Tabelas */
+  #receipt-print-content table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9px !important;
+  }
+
+  #receipt-print-content table th,
+  #receipt-print-content table td {
+    padding: 2px !important;
+    border: 1px solid black !important;
+  }
+
+  /* Textos compactos */
+  #receipt-print-content p,
+  #receipt-print-content span,
+  #receipt-print-content div {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Espaçamentos compactos */
+  #receipt-print-content .mb-1 {
+    margin-bottom: 1px !important;
+  }
+
+  #receipt-print-content .mb-2 {
+    margin-bottom: 2px !important;
+  }
+
+  #receipt-print-content .p-1 {
+    padding: 2px !important;
+  }
+
+  #receipt-print-content .p-2 {
+    padding: 3px !important;
+  }
+}
+
+/* ============================================
+   CLASSES UTILITÁRIAS PARA IMPRESSÃO
+   ============================================ */
+@media print {
+  /* Tamanhos de fonte */
+  .print\:text-xs {
+    font-size: 9px !important;
+  }
+
+  .print\:text-sm {
+    font-size: 11px !important;
+  }
+
+  .print\:text-base {
+    font-size: 12px !important;
+  }
+
+  .print\:text-lg {
+    font-size: 14px !important;
+  }
+
+  /* Espaçamentos */
+  .print\:p-1 {
+    padding: 2px !important;
+  }
+
+  .print\:p-2 {
+    padding: 4px !important;
+  }
+
+  .print\:p-3 {
+    padding: 6px !important;
+  }
+
+  .print\:m-0 {
+    margin: 0 !important;
+  }
+
+  .print\:mb-1 {
+    margin-bottom: 2px !important;
+  }
+
+  .print\:mb-2 {
+    margin-bottom: 4px !important;
+  }
+
+  /* Bordas */
+  .print\:border-1 {
+    border-width: 1px !important;
+  }
+
+  .print\:border-2 {
+    border-width: 2px !important;
+  }
+
+  /* Cores */
+  .print\:bg-white {
+    background-color: white !important;
+  }
+
+  .print\:bg-gray-100 {
+    background-color: #f5f5f5 !important;
+  }
+
+  .print\:text-black {
+    color: black !important;
+  }
+}
+
+/* ============================================
+   FIX PARA ELECTRON
+   ============================================ */
+@media print {
+  /* Garantir que o Electron não aplique estilos extras */
+  html, body {
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Remover sombras e efeitos visuais */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Garantir contraste */
+  h1, h2, h3, h4, h5, h6, p, span, div, td, th, li {
+    color: black !important;
+  }
+
+  /* Backgrounds importantes */
+  .bg-yellow-50 {
+    background-color: #fffbf0 !important;
+  }
+
+  .bg-gray-100 {
+    background-color: #f5f5f5 !important;
+  }
+
+  .bg-gray-50 {
+    background-color: #fafafa !important;
+  }
+}

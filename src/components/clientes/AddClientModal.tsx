@@ -1,0 +1,361 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Button } from "../ui/button";
+import { useState } from "react";
+import { toast } from "sonner";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { 
+  isValidEmail, 
+  isValidPhone, 
+  isValidCPF, 
+  formatPhone, 
+  formatCPF,
+  validationMessages 
+} from "../../lib/validators";
+import { useClients } from "../../hooks/useClients";
+
+interface AddClientModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  onSuccessAndCreateOS?: (client: any) => void;
+}
+
+export function AddClientModal({ open, onOpenChange, onSuccess, onSuccessAndCreateOS }: AddClientModalProps) {
+  const { createClient } = useClients();
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    cpf: "",
+    address: "",
+    city: "Vitória da Conquista",
+    state: "BA",
+  });
+
+  const [touched, setTouched] = useState({
+    phone: false,
+    email: false,
+    cpf: false,
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const emailValid = isValidEmail(formData.email);
+  const phoneValid = isValidPhone(formData.phone);
+  const cpfValid = isValidCPF(formData.cpf);
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhone(e.target.value);
+    setFormData({ ...formData, phone: formatted });
+  };
+
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCPF(e.target.value);
+    setFormData({ ...formData, cpf: formatted });
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    setTouched({
+      phone: true,
+      email: true,
+      cpf: true,
+    });
+
+    if (!formData.name.trim()) {
+      toast.error("Nome é obrigatório");
+      return false;
+    }
+
+    if (!phoneValid) {
+      toast.error("Telefone inválido", {
+        description: validationMessages.phone
+      });
+      return false;
+    }
+
+    if (formData.email && !emailValid) {
+      toast.error("E-mail inválido", {
+        description: validationMessages.email
+      });
+      return false;
+    }
+
+    if (formData.cpf && !cpfValid) {
+      toast.error("CPF inválido", {
+        description: validationMessages.cpf
+      });
+      return false;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      const whatsapp = formData.phone.replace(/\D/g, '');
+
+      const newClient = await createClient({
+        name: formData.name.trim(),
+        phone: formData.phone,
+        whatsapp: whatsapp || undefined,
+        email: formData.email || undefined,
+        cpf: formData.cpf || undefined,
+        address: formData.address || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+      });
+
+      toast.success("Cliente cadastrado com sucesso!");
+      
+      const clientData = {
+        name: formData.name.trim(),
+        phone: formData.phone,
+        whatsapp: whatsapp || undefined,
+        email: formData.email || undefined,
+        cpf: formData.cpf || undefined,
+        address: formData.address || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        ...newClient
+      };
+      
+      setFormData({
+        name: "",
+        phone: "",
+        email: "",
+        cpf: "",
+        address: "",
+        city: "Vitória da Conquista",
+        state: "BA",
+      });
+      
+      setTouched({
+        phone: false,
+        email: false,
+        cpf: false,
+      });
+      
+      onOpenChange(false);
+      
+      if (onSuccess) {
+        onSuccess();
+      }
+      
+      return clientData;
+    } catch (error) {
+      console.error('Error creating client:', error);
+      toast.error(error instanceof Error ? error.message : "Erro ao cadastrar cliente");
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveAndCreateOS = async () => {
+    const clientData = await handleSubmit();
+    if (clientData && onSuccessAndCreateOS) {
+      setTimeout(() => {
+        onSuccessAndCreateOS(clientData);
+      }, 300);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Novo Cliente</DialogTitle>
+          <DialogDescription>
+            Cadastre um novo cliente no sistema
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Nome Completo *</Label>
+            <Input 
+              id="name" 
+              placeholder="Digite o nome completo" 
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              disabled={isSubmitting}
+              required 
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cpf">CPF</Label>
+              <div className="relative">
+                <Input 
+                  id="cpf" 
+                  placeholder="000.000.000-00"
+                  value={formData.cpf}
+                  onChange={handleCPFChange}
+                  onBlur={() => setTouched({ ...touched, cpf: true })}
+                  maxLength={14}
+                  disabled={isSubmitting}
+                  className={
+                    formData.cpf && touched.cpf
+                      ? cpfValid
+                        ? "border-green-500 pr-10"
+                        : "border-red-500 pr-10"
+                      : ""
+                  }
+                />
+                {formData.cpf && touched.cpf && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {cpfValid ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-red-500" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {formData.cpf && touched.cpf && !cpfValid && (
+                <p className="text-xs text-red-500">{validationMessages.cpf}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefone *</Label>
+              <div className="relative">
+                <Input 
+                  id="phone" 
+                  placeholder="(00) 00000-0000"
+                  value={formData.phone}
+                  onChange={handlePhoneChange}
+                  onBlur={() => setTouched({ ...touched, phone: true })}
+                  maxLength={15}
+                  disabled={isSubmitting}
+                  required
+                  className={
+                    formData.phone && touched.phone
+                      ? phoneValid
+                        ? "border-green-500 pr-10"
+                        : "border-red-500 pr-10"
+                      : ""
+                  }
+                />
+                {formData.phone && touched.phone && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {phoneValid ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-red-500" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {formData.phone && touched.phone && !phoneValid && (
+                <p className="text-xs text-red-500">{validationMessages.phone}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email">E-mail (opcional)</Label>
+            <div className="relative">
+              <Input 
+                id="email" 
+                type="text"
+                placeholder="cliente@email.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onBlur={() => setTouched({ ...touched, email: true })}
+                disabled={isSubmitting}
+                className={
+                  formData.email && touched.email
+                    ? emailValid
+                      ? "border-green-500 pr-10"
+                      : "border-red-500 pr-10"
+                    : ""
+                }
+              />
+              {formData.email && touched.email && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {emailValid ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-500" />
+                  )}
+                </div>
+              )}
+            </div>
+            {formData.email && touched.email && !emailValid && (
+              <p className="text-xs text-red-500">{validationMessages.email}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="address">Endereço</Label>
+            <Input 
+              id="address" 
+              placeholder="Rua, número, bairro"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="city">Cidade</Label>
+              <Input 
+                id="city" 
+                placeholder="Digite a cidade"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="state">Estado</Label>
+              <Input 
+                id="state" 
+                placeholder="UF"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                maxLength={2}
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              variant="outline"
+              className="border-[#8b7355] text-[#8b7355] hover:bg-[#8b7355]/10 w-full sm:w-auto"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Cadastrando..." : "Salvar"}
+            </Button>
+            {onSuccessAndCreateOS && (
+              <Button 
+                type="button" 
+                className="bg-[#8b7355] hover:bg-[#7a6345] w-full sm:w-auto"
+                disabled={isSubmitting}
+                onClick={handleSaveAndCreateOS}
+              >
+                {isSubmitting ? "Cadastrando..." : "Salvar e Continuar para O.S"}
+              </Button>
+            )}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
