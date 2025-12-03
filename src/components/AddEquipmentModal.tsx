@@ -2,13 +2,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
-import { DEVICE_TYPES, BRANDS, PRODUCT_COLORS } from "../lib/constants";
 import type { Equipment } from "../types";
-import { useState, useEffect } from "react";
-import { useDropdownOptions } from "../hooks/useDropdownOptions";
-import { useSystemVariables } from "../hooks/useSystemVariables";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface AddEquipmentModalProps {
@@ -18,103 +14,24 @@ interface AddEquipmentModalProps {
 }
 
 export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: AddEquipmentModalProps) {
-  const { addVariable, refresh, variables } = useSystemVariables();
-  
-  // Recarregar variáveis quando o modal abrir
-  useEffect(() => {
-    if (open) {
-      refresh();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  
-  // Calcular as listas dinamicamente baseado nas variáveis
-  const deviceTypes = variables
-    .filter(v => v.category === 'device_types')
-    .map(v => v.value)
-    .sort();
-  
-  const brands = variables
-    .filter(v => v.category === 'brands')
-    .map(v => v.value)
-    .sort();
-  
-  const productColors = variables
-    .filter(v => v.category === 'product_colors')
-    .map(v => v.value)
-    .sort();
-  
   const [formData, setFormData] = useState({
     device: "",
-    customDevice: "",
     brand: "",
-    customBrand: "",
     model: "",
     color: "",
-    customColor: "",
     serialNumber: "",
     notes: "",
   });
 
-  // States for custom inputs
-  const [showCustomDevice, setShowCustomDevice] = useState(false);
-  const [showCustomBrand, setShowCustomBrand] = useState(false);
-  const [showCustomColor, setShowCustomColor] = useState(false);
-
-  // Handle device selection
-  const handleDeviceChange = (value: string) => {
-    setFormData({ ...formData, device: value, customDevice: "" });
-    setShowCustomDevice(value === "Outro");
-  };
-
-  // Handle brand selection
-  const handleBrandChange = (value: string) => {
-    setFormData({ ...formData, brand: value, customBrand: "" });
-    setShowCustomBrand(value === "Outro");
-  };
-
-  // Handle color selection
-  const handleColorChange = (value: string) => {
-    setFormData({ ...formData, color: value, customColor: "" });
-    setShowCustomColor(value === "Outro");
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Get final values (use custom if "Outro" is selected)
-    const finalDevice = formData.device === "Outro" ? formData.customDevice : formData.device;
-    const finalBrand = formData.brand === "Outro" ? formData.customBrand : formData.brand;
-    const finalColor = formData.color === "Outro" ? formData.customColor : formData.color;
-
-    // Save custom values to system variables
-    if (formData.device === "Outro" && formData.customDevice.trim()) {
-      const added = addVariable('device_types', formData.customDevice);
-      if (added) {
-        toast.success(`Tipo "${formData.customDevice}" adicionado à lista!`);
-      }
-    }
-    
-    if (formData.brand === "Outro" && formData.customBrand.trim()) {
-      const added = addVariable('brands', formData.customBrand);
-      if (added) {
-        toast.success(`Marca "${formData.customBrand}" adicionada à lista!`);
-      }
-    }
-    
-    if (formData.color === "Outro" && formData.customColor.trim()) {
-      const added = addVariable('product_colors', formData.customColor);
-      if (added) {
-        toast.success(`Cor "${formData.customColor}" adicionada à lista!`);
-      }
-    }
 
     const newEquipment: Equipment = {
       id: Date.now().toString(),
-      device: finalDevice,
-      brand: finalBrand,
+      device: formData.device,
+      brand: formData.brand,
       model: formData.model,
-      color: finalColor || undefined,
+      color: formData.color || undefined,
       serialNumber: formData.serialNumber || undefined,
       notes: formData.notes || undefined,
       lastServiceDate: new Date().toISOString(),
@@ -132,18 +49,12 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
   const resetForm = () => {
     setFormData({
       device: "",
-      customDevice: "",
       brand: "",
-      customBrand: "",
       model: "",
       color: "",
-      customColor: "",
       serialNumber: "",
       notes: "",
     });
-    setShowCustomDevice(false);
-    setShowCustomBrand(false);
-    setShowCustomColor(false);
   };
 
   // Reset form when modal closes
@@ -167,60 +78,24 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="device">Tipo de Aparelho *</Label>
-              <Select 
+              <Input 
+                id="device" 
+                placeholder="Ex: Smart TV, Notebook, Celular"
                 value={formData.device}
-                onValueChange={handleDeviceChange}
-                required
-              >
-                <SelectTrigger id="device">
-                  <SelectValue placeholder="Selecione o aparelho" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...deviceTypes.filter(d => d !== "Outro"), "Outro"].map((device) => (
-                    <SelectItem key={device} value={device}>
-                      {device}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {showCustomDevice && (
-                <Input 
-                  placeholder="Digite o tipo de aparelho"
-                  value={formData.customDevice}
-                  onChange={(e) => setFormData({...formData, customDevice: e.target.value})}
-                  required
-                  className="mt-2"
-                />
-              )}
+                onChange={(e) => setFormData({...formData, device: e.target.value})}
+                required 
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="brand">Marca *</Label>
-              <Select 
+              <Input 
+                id="brand" 
+                placeholder="Ex: Samsung, LG, Apple"
                 value={formData.brand}
-                onValueChange={handleBrandChange}
-                required
-              >
-                <SelectTrigger id="brand">
-                  <SelectValue placeholder="Selecione a marca" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...brands.filter(b => b !== "Outro"), "Outro"].map((brand) => (
-                    <SelectItem key={brand} value={brand}>
-                      {brand}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {showCustomBrand && (
-                <Input 
-                  placeholder="Digite a marca"
-                  value={formData.customBrand}
-                  onChange={(e) => setFormData({...formData, customBrand: e.target.value})}
-                  required
-                  className="mt-2"
-                />
-              )}
+                onChange={(e) => setFormData({...formData, brand: e.target.value})}
+                required 
+              />
             </div>
           </div>
 
@@ -238,29 +113,12 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
 
             <div className="space-y-2">
               <Label htmlFor="color">Cor do Produto</Label>
-              <Select 
+              <Input 
+                id="color" 
+                placeholder="Ex: Preto, Branco, Cinza"
                 value={formData.color}
-                onValueChange={handleColorChange}
-              >
-                <SelectTrigger id="color">
-                  <SelectValue placeholder="Selecione a cor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...productColors.filter(c => c !== "Outro"), "Outro"].map((color) => (
-                    <SelectItem key={color} value={color}>
-                      {color}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {showCustomColor && (
-                <Input 
-                  placeholder="Digite a cor"
-                  value={formData.customColor}
-                  onChange={(e) => setFormData({...formData, customColor: e.target.value})}
-                  className="mt-2"
-                />
-              )}
+                onChange={(e) => setFormData({...formData, color: e.target.value})}
+              />
             </div>
           </div>
 

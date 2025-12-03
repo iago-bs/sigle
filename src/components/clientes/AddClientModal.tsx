@@ -76,16 +76,21 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
       return false;
     }
 
-    if (formData.email && !emailValid) {
-      toast.error("E-mail inválido", {
-        description: validationMessages.email
+    if (!formData.cpf || !cpfValid) {
+      toast.error("CPF é obrigatório e deve ser válido", {
+        description: validationMessages.cpf
       });
       return false;
     }
 
-    if (formData.cpf && !cpfValid) {
-      toast.error("CPF inválido", {
-        description: validationMessages.cpf
+    if (!formData.address || !formData.address.trim()) {
+      toast.error("Endereço é obrigatório");
+      return false;
+    }
+
+    if (formData.email && !emailValid) {
+      toast.error("E-mail inválido", {
+        description: validationMessages.email
       });
       return false;
     }
@@ -100,8 +105,8 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
         phone: formData.phone,
         whatsapp: whatsapp || undefined,
         email: formData.email || undefined,
-        cpf: formData.cpf || undefined,
-        address: formData.address || undefined,
+        cpf: formData.cpf,
+        address: formData.address,
         city: formData.city || undefined,
         state: formData.state || undefined,
       });
@@ -113,8 +118,8 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
         phone: formData.phone,
         whatsapp: whatsapp || undefined,
         email: formData.email || undefined,
-        cpf: formData.cpf || undefined,
-        address: formData.address || undefined,
+        cpf: formData.cpf,
+        address: formData.address,
         city: formData.city || undefined,
         state: formData.state || undefined,
         ...newClient
@@ -186,7 +191,7 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cpf">CPF</Label>
+              <Label htmlFor="cpf">CPF *</Label>
               <div className="relative">
                 <Input 
                   id="cpf" 
@@ -196,6 +201,7 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
                   onBlur={() => setTouched({ ...touched, cpf: true })}
                   maxLength={14}
                   disabled={isSubmitting}
+                  required
                   className={
                     formData.cpf && touched.cpf
                       ? cpfValid
@@ -290,13 +296,14 @@ export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModal
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Endereço</Label>
+            <Label htmlFor="address">Endereço *</Label>
             <Input 
               id="address" 
               placeholder="Rua, número, bairro"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               disabled={isSubmitting}
+              required
             />
           </div>
 

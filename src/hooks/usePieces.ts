@@ -16,14 +16,14 @@ export function usePieces() {
 
   const shopToken = user?.shopToken ?? DEFAULT_SHOP_TOKEN;
 
-  // Buscar peças
+  // Buscar peças (incluindo inativas)
   const fetchPieces = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/pieces?shopToken=${shopToken}`,
+        `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/pieces?shopToken=${shopToken}&includeInactive=true`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -53,6 +53,7 @@ export function usePieces() {
         serialNumber: piece.serial_number,
         notes: piece.notes,
         createdAt: piece.created_at,
+        active: piece.active,
       } as Piece));
       
       console.log('[usePieces] Mapped pieces:', mappedPieces.length);
@@ -150,7 +151,7 @@ export function usePieces() {
   }, [shopToken, fetchPieces]);
 
   // Deletar peça
-  const deletePiece = useCallback(async (pieceId: string): Promise<void> => {
+  const deletePiece = useCallback(async (pieceId: string): Promise<{ action: string; message: string }> => {
     console.log('[deletePiece] Starting deletion for:', pieceId);
     
     const response = await fetch(
@@ -185,9 +186,16 @@ export function usePieces() {
       throw new Error(errorMessage);
     }
 
-    console.log('[deletePiece] Deletion successful, fetching updated list');
+    const data = await response.json();
+    console.log('[deletePiece] Response data:', data);
+
     // Atualizar lista local
     await fetchPieces();
+    
+    return {
+      action: data.action || 'deleted',
+      message: data.message || 'Operação realizada com sucesso'
+    };
   }, [shopToken, fetchPieces]);
 
   // Carregar peças ao montar ou quando shopToken mudar

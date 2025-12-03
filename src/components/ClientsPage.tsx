@@ -22,7 +22,7 @@ interface ClientsPageProps {
 }
 
 export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
-  const { clients, loading, inactivateClient, fetchClients } = useClients();
+  const { clients, loading, deleteClient, fetchClients } = useClients();
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -53,12 +53,16 @@ export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
     if (!deletingClient) return;
 
     try {
-      await inactivateClient(deletingClient.id);
-      toast.success(`Cliente "${deletingClient.name}" inativado com sucesso!`);
+      const result = await deleteClient(deletingClient.id);
+      if (result.action === 'inactivated') {
+        toast.info(result.message);
+      } else {
+        toast.success(result.message);
+      }
       setDeletingClient(null);
     } catch (error) {
-      console.error('Error inactivating client:', error);
-      toast.error(error instanceof Error ? error.message : "Erro ao inativar cliente");
+      console.error('Error deleting client:', error);
+      toast.error(error instanceof Error ? error.message : "Erro ao deletar cliente");
     }
   };
 
@@ -224,11 +228,12 @@ export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Inativar Cliente</AlertDialogTitle>
+            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja inativar o cliente{" "}
-              <strong>{deletingClient?.name}</strong>? Este cliente será movido
-              para a lista de inativos e poderá ser reativado depois.
+              Tem certeza que deseja excluir o cliente{" "}
+              <strong>{deletingClient?.name}</strong>?
+              {" "}Se o cliente possuir ordens de serviço associadas, ele será apenas inativado.
+              Caso contrário, será excluído permanentemente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -237,7 +242,7 @@ export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
               onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700"
             >
-              Inativar
+              Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

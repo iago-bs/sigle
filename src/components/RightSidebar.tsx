@@ -15,7 +15,6 @@ interface RightSidebarProps {
   onNavigateToPieces: () => void;
   onNavigateToParts: () => void;
   onNavigateToEquipments: () => void;
-  onNavigateToVariables: () => void;
   onManageTechnicians: () => void;
   onLogout: () => void;
 }
@@ -27,7 +26,6 @@ export function RightSidebar({
   onNavigateToPieces,
   onNavigateToParts,
   onNavigateToEquipments,
-  onNavigateToVariables,
   onLogout,
 }: RightSidebarProps) {
   return (
@@ -163,24 +161,6 @@ export function RightSidebar({
             }}
           >
             ESTOQUE
-          </span>
-        </button>
-
-        <button
-          onClick={onNavigateToVariables}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <Settings className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            VARIÁVEIS
           </span>
         </button>
 

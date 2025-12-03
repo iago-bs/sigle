@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import type { Piece } from "../types";
-import { useSystemVariables } from "../hooks/useSystemVariables";
 
 interface AddPieceModalProps {
   isOpen: boolean;
@@ -11,35 +10,13 @@ interface AddPieceModalProps {
 }
 
 export function AddPieceModal({ isOpen, onClose, onAdd }: AddPieceModalProps) {
-  const { variables, addVariable, refresh } = useSystemVariables();
   const [name, setName] = useState("");
   const [partType, setPartType] = useState("");
-  const [customPartType, setCustomPartType] = useState("");
-  const [showCustomPartType, setShowCustomPartType] = useState(false);
   const [serialNumber, setSerialNumber] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Carregar variáveis quando o modal abrir
-  useEffect(() => {
-    if (isOpen) {
-      refresh();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
-  // Get part types from variables
-  const partTypes = variables
-    .filter((v) => v.category === "part_types")
-    .map((v) => v.value);
-
-  // Filter out duplicate "Outro" entries
-  const uniquePartTypes = [...partTypes.filter(pt => pt !== "Outro"), "Outro"];
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Get final part type value (use custom if "Outro" is selected)
-    const finalPartType = partType === "Outro" ? customPartType : partType;
 
     // Validation
     if (!name.trim()) {
@@ -47,23 +24,15 @@ export function AddPieceModal({ isOpen, onClose, onAdd }: AddPieceModalProps) {
       return;
     }
 
-    if (!finalPartType.trim()) {
-      toast.error("Por favor, selecione ou digite o tipo da peça");
+    if (!partType.trim()) {
+      toast.error("Por favor, digite o tipo da peça");
       return;
-    }
-
-    // Save custom part type to variables if "Outro" was selected
-    if (partType === "Outro" && customPartType.trim()) {
-      const added = addVariable('part_types', customPartType);
-      if (added) {
-        toast.success(`Tipo "${customPartType}" adicionado à lista!`);
-      }
     }
 
     try {
       await onAdd({
         name: name.trim(),
-        partType: finalPartType.trim(),
+        partType: partType.trim(),
         serialNumber: serialNumber.trim() || undefined,
         notes: notes.trim() || undefined,
       });
@@ -79,20 +48,9 @@ export function AddPieceModal({ isOpen, onClose, onAdd }: AddPieceModalProps) {
   const handleClose = () => {
     setName("");
     setPartType("");
-    setCustomPartType("");
-    setShowCustomPartType(false);
     setSerialNumber("");
     setNotes("");
     onClose();
-  };
-
-  // Handle part type selection
-  const handlePartTypeChange = (value: string) => {
-    setPartType(value);
-    setShowCustomPartType(value === "Outro");
-    if (value !== "Outro") {
-      setCustomPartType("");
-    }
   };
 
   if (!isOpen) return null;
@@ -133,37 +91,15 @@ export function AddPieceModal({ isOpen, onClose, onAdd }: AddPieceModalProps) {
             <label className="block text-sm font-medium mb-1">
               Tipo da Peça <span className="text-red-500">*</span>
             </label>
-            <select
+            <input
+              type="text"
               value={partType}
-              onChange={(e) => handlePartTypeChange(e.target.value)}
+              onChange={(e) => setPartType(e.target.value)}
+              placeholder="Ex: Placa Principal, Fonte, Inversor"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#8b7355]"
               required
-            >
-              <option value="">Selecione o tipo</option>
-              {uniquePartTypes.map((type, index) => (
-                <option key={index} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+            />
           </div>
-
-          {/* Custom Part Type (se "Outro" selecionado) */}
-          {showCustomPartType && (
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Digite o Tipo <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={customPartType}
-                onChange={(e) => setCustomPartType(e.target.value)}
-                placeholder="Ex: Inversor, LED Strip, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#8b7355]"
-                required={partType === "Outro"}
-              />
-            </div>
-          )}
 
           {/* Número de Série */}
           <div>

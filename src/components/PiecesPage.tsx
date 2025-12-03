@@ -22,6 +22,7 @@ interface PiecesPageProps {
   onAddPiece: () => void;
   onEditPiece: (piece: Piece) => void;
   onDeletePiece: (pieceId: string) => Promise<void>;
+  onReactivatePiece: (pieceId: string) => Promise<void>;
 }
 
 function formatDate(dateString: string): string {
@@ -38,14 +39,23 @@ export function PiecesPage({
   pieces, 
   onAddPiece, 
   onEditPiece, 
-  onDeletePiece 
+  onDeletePiece,
+  onReactivatePiece 
 }: PiecesPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
   const [pieceToDelete, setPieceToDelete] = useState<Piece | null>(null);
+  const [activeTab, setActiveTab] = useState<'active' | 'inactive'>('active');
+
+  // Separate pieces by active status
+  const activePieces = pieces.filter(p => p.active !== false);
+  const inactivePieces = pieces.filter(p => p.active === false);
+
+  // Get current tab pieces
+  const currentTabPieces = activeTab === 'active' ? activePieces : inactivePieces;
 
   // Filter pieces based on search
-  const filteredPieces = pieces.filter((piece) => {
+  const filteredPieces = currentTabPieces.filter((piece) => {
     const query = searchQuery.toLowerCase();
     return (
       piece.name.toLowerCase().includes(query) ||
@@ -62,7 +72,7 @@ export function PiecesPage({
       await onDeletePiece(pieceToDelete.id);
       setPieceToDelete(null);
       setSelectedPiece(null);
-      toast.success("Peça excluída com sucesso!");
+      // Mensagem já é exibida no App.tsx
     } catch (error) {
       console.error('Erro ao excluir peça:', error);
       toast.error(error instanceof Error ? error.message : "Erro ao excluir peça");
@@ -114,6 +124,36 @@ export function PiecesPage({
             <Plus className="w-4 h-4 mr-2" />
             Cadastrar Peça
           </Button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-4 mb-4">
+          <button
+            onClick={() => {
+              setActiveTab('active');
+              setSelectedPiece(null);
+            }}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'active'
+                ? 'bg-[#8b7355] text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Ativos ({activePieces.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('inactive');
+              setSelectedPiece(null);
+            }}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${
+              activeTab === 'inactive'
+                ? 'bg-[#8b7355] text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Inativos ({inactivePieces.length})
+          </button>
         </div>
 
         {/* Search Bar */}
@@ -174,20 +214,35 @@ export function PiecesPage({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => onEditPiece(selectedPiece)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8b7355] text-white hover:bg-[#7a6345] rounded-md transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => setPieceToDelete(selectedPiece)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Excluir
-                  </button>
+                  {selectedPiece.active !== false ? (
+                    <>
+                      <button
+                        onClick={() => onEditPiece(selectedPiece)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#8b7355] text-white hover:bg-[#7a6345] rounded-md transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => setPieceToDelete(selectedPiece)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Excluir
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        if (selectedPiece.id) {
+                          await onReactivatePiece(selectedPiece.id);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white hover:bg-green-700 rounded-md transition-colors"
+                    >
+                      Reativar
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -223,9 +278,16 @@ export function PiecesPage({
                         <h3 className="font-['Lexend_Deca'] font-medium text-lg text-gray-900 mb-1">
                           {piece.name}
                         </h3>
-                        <Badge variant="outline" className="text-xs">
-                          {piece.partType}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {piece.partType}
+                          </Badge>
+                          {piece.active === false && (
+                            <Badge variant="secondary" className="text-xs bg-gray-500 text-white">
+                              Inativo
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -244,26 +306,42 @@ export function PiecesPage({
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 mt-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditPiece(piece);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#8b7355] text-white hover:bg-[#7a6345] rounded transition-colors"
-                      >
-                        <Pencil className="w-3 h-3" />
-                        Editar
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPieceToDelete(piece);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Excluir
-                      </button>
+                      {piece.active !== false ? (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditPiece(piece);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#8b7355] text-white hover:bg-[#7a6345] rounded transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Editar
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPieceToDelete(piece);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Excluir
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (piece.id) {
+                              await onReactivatePiece(piece.id);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-green-600 text-white hover:bg-green-700 rounded transition-colors"
+                        >
+                          Reativar
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

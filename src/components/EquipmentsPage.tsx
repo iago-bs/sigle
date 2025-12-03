@@ -25,6 +25,7 @@ interface EquipmentsPageProps {
   onAddEquipment: () => void;
   onEditEquipment: (equipment: Equipment) => void;
   onDeleteEquipment: (equipmentId: string) => Promise<void>;
+  onReactivateEquipment: (equipmentId: string) => Promise<void>;
   onCreateClient: (clientData: any) => Promise<void>;
 }
 
@@ -145,7 +146,7 @@ function formatDate(dateString: string): string {
   });
 }
 
-export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipments, clients, onViewServiceOrder, onAddEquipment, onEditEquipment, onDeleteEquipment, onCreateClient }: EquipmentsPageProps) {
+export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipments, clients, onViewServiceOrder, onAddEquipment, onEditEquipment, onDeleteEquipment, onReactivateEquipment, onCreateClient }: EquipmentsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentStats | null>(null);
   const [activeTab, setActiveTab] = useState<"disponiveis" | "vendidos" | "garantia">("disponiveis");
@@ -165,27 +166,19 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
   // Agrupar equipamentos (mesclar manuais + O.S)
   const allEquipments = groupServiceOrdersByEquipment(serviceOrders, manualEquipments);
 
-  // Filtrar por status (disponível, vendido, garantia)
+  // Filtrar por status (ativos vs inativos)
   const now = new Date();
+  
+  // Ativos: equipamentos com active !== false
   const availableEquipments = allEquipments.filter(eq => {
     const manual = manualEquipments.find(m => m.id === eq.equipmentId);
-    return !manual?.status || manual.status === "available";
+    return manual?.active !== false && (!manual?.status || manual.status === "available");
   });
 
+  // Inativos: equipamentos com active === false
   const soldEquipments = allEquipments.filter(eq => {
     const manual = manualEquipments.find(m => m.id === eq.equipmentId);
-    const isSold = manual?.status === "sold";
-    if (isSold) {
-      console.log('[EquipmentsPage] Equipamento vendido encontrado:', {
-        id: manual?.id,
-        device: eq.device,
-        brand: eq.brand,
-        model: eq.model,
-        status: manual?.status,
-        warrantyEndDate: manual?.warrantyEndDate
-      });
-    }
-    return isSold;
+    return manual?.active === false;
   });
 
   const warrantyEquipments = allEquipments.filter(eq => {
@@ -299,16 +292,15 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
             variant={activeTab === "disponiveis" ? "default" : "outline"}
             className={activeTab === "disponiveis" ? "bg-[#8b7355] hover:bg-[#7a6345]" : ""}
           >
-            Disponíveis ({availableEquipments.length})
+            Ativos ({availableEquipments.length})
           </Button>
           <Button
             onClick={() => setActiveTab("vendidos")}
             variant={activeTab === "vendidos" ? "default" : "outline"}
             className={activeTab === "vendidos" ? "bg-[#8b7355] hover:bg-[#7a6345]" : ""}
           >
-            Vendidos ({soldEquipments.length})
+            Inativos ({soldEquipments.length})
           </Button>
-          {/* Botão 'Em Garantia' removido: garantias devem ser gerenciadas na página dedicada 'Garantias' */}
         </div>
 
         {/* Search Bar */}
@@ -397,38 +389,51 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                         return null; // Funcionalidade de venda removida
                       })()}
                       
-                      {/* Botão de editar (apenas para equipamentos manuais) */}
-                      {selectedEquipment.isManual && selectedEquipment.equipmentId && (
-                        <Button
-                          onClick={() => {
-                            const equipment = manualEquipments.find(e => e.id === selectedEquipment.equipmentId);
-                            if (equipment) {
-                              onEditEquipment(equipment);
-                            }
-                          }}
-                          variant="outline"
-                          size="sm"
-                          className="border-[#8b7355] text-[#8b7355] hover:bg-[#8b7355] hover:text-white"
-                        >
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Editar
-                        </Button>
-                      )}
-                      
-                      {/* Botão de excluir */}
-                      {canDeleteEquipment(selectedEquipment) ? (
-                        <button
-                          onClick={() => setEquipmentToDelete(selectedEquipment)}
-                          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Excluir
-                        </button>
-                      ) : selectedEquipment.totalServices > 0 && (
-                        <div className="bg-yellow-50 border border-yellow-300 rounded px-3 py-2">
-                          <span className="text-sm text-yellow-700">Equipamento com histórico não pode ser excluído</span>
-                        </div>
-                      )}
+                      {/* Botões de ação */}
+                      {selectedEquipment.isManual && selectedEquipment.equipmentId && (() => {
+                        const equipment = manualEquipments.find(e => e.id === selectedEquipment.equipmentId);
+                        const isInactive = equipment?.active === false;
+
+                        if (isInactive) {
+                          // Equipamento inativo - apenas botão Reativar
+                          return (
+                            <button
+                              onClick={() => {
+                                toast.info('Função de reativar em desenvolvimento');
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white hover:bg-green-700 rounded-md transition-colors"
+                            >
+                              Reativar
+                            </button>
+                          );
+                        }
+
+                        // Equipamento ativo - botões normais
+                        return (
+                          <>
+                            <Button
+                              onClick={() => {
+                                if (equipment) {
+                                  onEditEquipment(equipment);
+                                }
+                              }}
+                              variant="outline"
+                              size="sm"
+                              className="border-[#8b7355] text-[#8b7355] hover:bg-[#8b7355] hover:text-white"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Editar
+                            </Button>
+                            <button
+                              onClick={() => setEquipmentToDelete(selectedEquipment)}
+                              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Excluir
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -582,10 +587,10 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                   const hasRecurrentIssue = topDefect && topDefect.percentage >= 50;
 
                   return (
-                    <button
+                    <div
                       key={index}
                       onClick={() => setSelectedEquipment(equipment)}
-                      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:border-[#8b7355] transition-all text-left"
+                      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg hover:border-[#8b7355] transition-all cursor-pointer"
                     >
                       {/* Cabeçalho do Card */}
                       <div className="flex items-start justify-between mb-3">
@@ -599,6 +604,17 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                                 Manual
                               </Badge>
                             )}
+                            {(() => {
+                              const manual = manualEquipments.find(m => m.id === equipment.equipmentId);
+                              if (manual?.active === false) {
+                                return (
+                                  <Badge variant="secondary" className="text-xs bg-gray-500 text-white">
+                                    Inativo
+                                  </Badge>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <p className="text-sm text-gray-600">{equipment.brand} - {equipment.model}</p>
                         </div>
@@ -667,45 +683,54 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                             {equipment.lastServiceDate ? formatDate(equipment.lastServiceDate) : 'Sem serviços'}
                           </div>
                           <div className="flex items-center gap-2">
-                            {/* Botão Editar */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const eq = manualEquipments.find(m => m.id === equipment.equipmentId);
-                                if (eq) onEditEquipment(eq);
-                              }}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#8b7355] text-white hover:bg-[#7a6345] rounded transition-colors"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              Editar
-                            </button>
-                            {/* Botão Deletar - só aparece se não tiver histórico */}
-                            {equipment.totalServices === 0 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEquipmentToDelete(equipment);
-                                }}
-                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Excluir
-                              </button>
-                            )}
-                            {/* Status de vendido */}
                             {(() => {
-                              const manual = manualEquipments.find(m => m.id === equipment.equipmentId);
-                              const isAlreadySold = (manual?.status === "sold") || !!manual?.soldDate || !!manual?.warrantyEndDate;
-                              
-                              if (isAlreadySold) {
+                              const eq = manualEquipments.find(m => m.id === equipment.equipmentId);
+                              const isInactive = eq?.active === false;
+
+                              if (isInactive) {
+                                // Equipamento inativo - apenas botão Reativar
                                 return (
-                                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1.5 rounded">
-                                    ✓ Vendido
-                                  </span>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (equipment.equipmentId) {
+                                        await onReactivateEquipment(equipment.equipmentId);
+                                      }
+                                    }}
+                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-green-600 text-white hover:bg-green-700 rounded transition-colors"
+                                  >
+                                    Reativar
+                                  </button>
                                 );
                               }
-                              
-                              return null;
+
+                              // Equipamento ativo - botões normais
+                              return (
+                                <>
+                                  {/* Botão Editar */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (eq) onEditEquipment(eq);
+                                    }}
+                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#8b7355] text-white hover:bg-[#7a6345] rounded transition-colors"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                    Editar
+                                  </button>
+                                  {/* Botão Deletar */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEquipmentToDelete(equipment);
+                                    }}
+                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    Excluir
+                                  </button>
+                                </>
+                              );
                             })()}
                           </div>
                         </div>
@@ -715,7 +740,7 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                           Último: {formatDate(equipment.lastServiceDate)}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

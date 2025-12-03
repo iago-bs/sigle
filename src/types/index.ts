@@ -26,7 +26,8 @@ export interface Client {
   address?: string;
   city?: string;
   state?: string;
-  isActive?: boolean;      // Soft delete flag (default: true)
+  isActive?: boolean;      // Soft delete flag (default: true) - DEPRECATED usar 'active'
+  active?: boolean;        // true=ativo, false=inativo (soft delete)
   deletedAt?: string;      // When was inactivated
 }
 
@@ -57,6 +58,7 @@ export interface ServiceOrder {
   client_name: string;
   client_phone: string;
   client_whatsapp?: string;
+  equipment_manual_id?: string; // FK to equipments_manual
   equipment_type: string;
   equipment_brand?: string;
   equipment_model?: string;
@@ -153,15 +155,17 @@ export interface Equipment {
   warrantyEndDate?: string; // Data de fim da garantia (3 meses após venda)
   soldTo?: string; // Cliente que comprou
   soldDate?: string; // Data da venda (alias de saleDate, quando aplicável)
+  active?: boolean; // true=ativo, false=inativo (soft delete)
 }
 
 export interface Piece {
   id: string;
   name: string;              // Nome da peça
-  partType: string;          // Tipo da peça (do sistema de variáveis)
+  partType: string;          // Tipo da peça (campo de texto livre)
   serialNumber?: string;     // Número de série
   notes?: string;            // Observações
   createdAt: string;         // Data de cadastro
+  active?: boolean;          // true=ativo, false=inativo (soft delete)
 }
 
 export interface OnlinePart {
