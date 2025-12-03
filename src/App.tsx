@@ -21,6 +21,7 @@ import {
   initialTechnicians,
   DEFAULT_SHOP_TOKEN
 } from "./lib/constants";
+import { projectId, publicAnonKey } from "./utils/supabase/info";
 
 // Custom Hooks
 import { useLocalStorage } from "./hooks/useLocalStorage";
@@ -87,9 +88,6 @@ import { PartsPage } from "./components/PartsPage";
 // Técnicos (Technicians)
 import { TechniciansManagementModal } from "./components/TechniciansManagementModal";
 import { TechniciansPage } from "./components/TechniciansPage";
-
-// Variáveis do Sistema
-import { VariablesPage } from "./components/VariablesPage";
 
 // UI Components
 import { Toaster } from "./components/ui/sonner";
@@ -978,8 +976,36 @@ export default function App() {
               setIsEditEquipmentModalOpen(true);
             }}
             onDeleteEquipment={async (equipmentId: string) => {
-              await deleteEquipment(equipmentId);
-              toast.success("Equipamento excluído com sucesso!");
+              const result = await deleteEquipment(equipmentId);
+              if (result.action === 'inactivated') {
+                toast.info(result.message);
+              } else {
+                toast.success(result.message);
+              }
+            }}
+            onReactivateEquipment={async (equipmentId: string) => {
+              try {
+                const response = await fetch(
+                  `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments/${equipmentId}/reactivate`,
+                  {
+                    method: 'PUT',
+                    headers: {
+                      'Authorization': `Bearer ${publicAnonKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                  }
+                );
+                
+                if (!response.ok) {
+                  throw new Error('Erro ao reativar equipamento');
+                }
+                
+                await fetchEquipments();
+                toast.success("Equipamento reativado com sucesso!");
+              } catch (error) {
+                console.error('Error reactivating equipment:', error);
+                toast.error("Erro ao reativar equipamento");
+              }
             }}
             onCreateClient={async (clientData) => {
               await createClient(clientData);
@@ -996,8 +1022,36 @@ export default function App() {
               setIsEditPieceModalOpen(true);
             }}
             onDeletePiece={async (pieceId: string) => {
-              await deletePiece(pieceId);
-              toast.success("Peça excluída com sucesso!");
+              const result = await deletePiece(pieceId);
+              if (result.action === 'inactivated') {
+                toast.info(result.message);
+              } else {
+                toast.success(result.message);
+              }
+            }}
+            onReactivatePiece={async (pieceId: string) => {
+              try {
+                const response = await fetch(
+                  `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/pieces/${pieceId}/reactivate`,
+                  {
+                    method: 'PUT',
+                    headers: {
+                      'Authorization': `Bearer ${publicAnonKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                  }
+                );
+                
+                if (!response.ok) {
+                  throw new Error('Erro ao reativar peça');
+                }
+                
+                await fetchPieces();
+                toast.success("Peça reativada com sucesso!");
+              } catch (error) {
+                console.error('Error reactivating piece:', error);
+                toast.error("Erro ao reativar peça");
+              }
             }}
           />
         ) : currentPage === "technicians" ? (
@@ -1015,7 +1069,9 @@ export default function App() {
               </button>
             </div>
             <div className="w-full p-6 overflow-auto">
-              <VariablesPage />
+              <div className="text-center text-gray-500 mt-20">
+                Esta página foi removida. Use campos de texto livre nos formulários.
+              </div>
             </div>
           </div>
         ) : currentPage === "print-os" && currentServiceOrder ? (

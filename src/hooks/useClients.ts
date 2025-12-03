@@ -211,7 +211,7 @@ export function useClients(options?: { autoFetch?: boolean }) {
   }, [shopToken]);
 
   // Deletar permanentemente
-  const deleteClient = useCallback(async (id: string): Promise<void> => {
+  const deleteClient = useCallback(async (id: string): Promise<{ action: string; message: string }> => {
     if (!shopToken) {
       throw new Error('Usuário não autenticado');
     }
@@ -231,8 +231,19 @@ export function useClients(options?: { autoFetch?: boolean }) {
       throw new Error(errorData.error || 'Erro ao deletar cliente');
     }
 
-    // Remover da lista local
-    setClients(prev => prev.filter(c => c.id !== id));
+    const data = await response.json();
+    
+    // Atualizar lista local
+    if (data.action === 'deleted') {
+      setClients(prev => prev.filter(c => c.id !== id));
+    } else if (data.action === 'inactivated') {
+      setClients(prev => prev.map(c => c.id === id ? { ...c, active: false, is_active: false } : c));
+    }
+    
+    return {
+      action: data.action || 'deleted',
+      message: data.message || 'Operação realizada com sucesso'
+    };
   }, [shopToken]);
 
   // Buscar cliente por ID

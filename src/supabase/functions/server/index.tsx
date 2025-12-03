@@ -651,7 +651,24 @@ app.get("/make-server-9bef0ec0/clients", async (c) => {
       return c.json({ error: "Token da loja é obrigatório" }, 400);
     }
 
-    const clients = await db.getClients(shopToken, includeInactive);
+    const supabase = db.getSupabaseClient();
+    
+    let query = supabase
+      .from('clients')
+      .select('*')
+      .eq('shop_token', shopToken);
+
+    // Por padrão, retorna apenas ativos
+    if (!includeInactive) {
+      query = query.eq('active', true);
+    }
+
+    const { data: clients, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[GET /clients] Error:', error);
+      return c.json({ error: "Erro ao buscar clientes" }, 500);
+    }
 
     return c.json({ success: true, clients });
 
@@ -666,11 +683,33 @@ app.post("/make-server-9bef0ec0/clients", async (c) => {
   try {
     const { shopToken, name, phone, whatsapp, email, cpf, address, city, state } = await c.req.json();
 
-    console.log('Create client request:', { shopToken, name, phone, whatsapp, email, cpf, address, city, state });
+    console.log('[POST /clients] Create client request:', { shopToken, name, phone });
 
-    if (!shopToken || !name || !phone) {
-      console.log('Missing required fields:', { shopToken, name, phone });
-      return c.json({ error: "Campos obrigatórios faltando" }, 400);
+    if (!shopToken || !name || !phone || !cpf || !address) {
+      console.log('[POST /clients] Missing required fields');
+      return c.json({ error: "Campos obrigatórios: nome, telefone, CPF e endereço" }, 400);
+    }
+
+    const supabase = db.getSupabaseClient();
+
+    // Validar duplicata por CPF (se fornecido)
+    if (cpf) {
+      const { data: existingCpf, error: cpfCheckError } = await supabase
+        .from('clients')
+        .select('id, active, name')
+        .eq('shop_token', shopToken)
+        .eq('cpf', cpf);
+
+      if (cpfCheckError) {
+        console.error('[POST /clients] Error checking CPF duplicate:', cpfCheckError);
+      }
+
+      if (existingCpf && existingCpf.length > 0) {
+        const status = existingCpf[0].active ? 'ativo' : 'inativo';
+        return c.json({ 
+          error: `CPF ${cpf} já cadastrado para o cliente "${existingCpf[0].name}" (${status}).`
+        }, 400);
+      }
     }
 
     const client = await db.insertClient({
@@ -684,24 +723,20 @@ app.post("/make-server-9bef0ec0/clients", async (c) => {
       city,
       state,
       is_active: true,
+      active: true,
     });
 
-    console.log('Client created successfully:', client.id);
+    console.log('[POST /clients] Client created successfully:', client.id);
     return c.json({ success: true, client });
 
   } catch (error) {
-    console.log('Create client error details:', error);
-    console.log('Error type:', typeof error);
-    console.log('Error keys:', error ? Object.keys(error) : 'null');
+    console.log('[POST /clients] Error details:', error);
     
     let errorMessage = 'Erro desconhecido';
     if (error instanceof Error) {
       errorMessage = error.message;
-      console.log('Error message:', error.message);
-      console.log('Error stack:', error.stack);
     } else if (typeof error === 'object' && error !== null) {
       errorMessage = JSON.stringify(error);
-      console.log('Error object:', JSON.stringify(error, null, 2));
     }
     
     return c.json({ error: `Erro ao criar cliente: ${errorMessage}` }, 500);
@@ -754,18 +789,96 @@ app.post("/make-server-9bef0ec0/clients/:id/reactivate", async (c) => {
   }
 });
 
-// Delete client permanently
+// Delete client (soft delete if has service orders, hard delete otherwise)
 app.delete("/make-server-9bef0ec0/clients/:id", async (c) => {
   try {
     const id = c.req.param('id');
+    const supabase = db.getSupabaseClient();
 
+    console.log('[DELETE /clients] Checking client:', id);
+
+    // Verificar se cliente possui ordens de serviço
+    const { data: orders, error: ordersError } = await supabase
+      .from('service_orders')
+      .select('id')
+      .eq('client_id', id)
+      .limit(1);
+
+    if (ordersError) {
+      console.error('[DELETE /clients] Error checking service orders:', ordersError);
+      return c.json({ error: "Erro ao verificar ordens de serviço" }, 500);
+    }
+
+    if (orders && orders.length > 0) {
+      // Cliente possui histórico de OS - apenas inativa
+      console.log('[DELETE /clients] Client has service orders, soft deleting');
+      
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({ active: false, is_active: false })
+        .eq('id', id);
+
+      if (updateError) {
+        console.error('[DELETE /clients] Error inactivating:', updateError);
+        return c.json({ error: "Erro ao inativar cliente" }, 500);
+      }
+
+      return c.json({ 
+        success: true, 
+        action: 'inactivated',
+        message: 'Cliente inativado (possui ordens de serviço associadas)'
+      });
+    }
+
+    // Cliente sem histórico - pode deletar permanentemente
+    console.log('[DELETE /clients] Client has no service orders, hard deleting');
     await db.deleteClient(id);
 
-    return c.json({ success: true });
+    return c.json({ 
+      success: true, 
+      action: 'deleted',
+      message: 'Cliente excluído permanentemente'
+    });
 
   } catch (error) {
-    console.log(`Delete client error: ${error}`);
+    console.log('[DELETE /clients] Error:', error);
     return c.json({ error: "Erro ao deletar cliente" }, 500);
+  }
+});
+
+// Reactivate client
+app.put("/make-server-9bef0ec0/clients/:id/reactivate", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Client ID is required" }, 400);
+    }
+
+    console.log(`[PUT /clients/reactivate] Reactivating client ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { error: updateError } = await supabase
+      .from('clients')
+      .update({ active: true, is_active: true })
+      .eq('id', id);
+
+    if (updateError) {
+      console.log(`[PUT /clients/reactivate] Error:`, updateError);
+      return c.json({ error: "Erro ao reativar cliente" }, 500);
+    }
+
+    console.log(`[PUT /clients/reactivate] Client ${id} reactivated successfully`);
+    return c.json({ success: true, message: 'Cliente reativado com sucesso' });
+
+  } catch (error) {
+    console.log(`Reactivate client error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao reativar cliente",
+      details: errorMessage 
+    }, 500);
   }
 });
 
@@ -1058,16 +1171,34 @@ app.get("/make-server-9bef0ec0/equipments", async (c) => {
   try {
     console.log('[GET /equipments] Starting request...');
     const shopToken = c.req.query('shopToken');
-    console.log('[GET /equipments] shopToken:', shopToken);
+    const includeInactive = c.req.query('includeInactive') === 'true';
+    console.log('[GET /equipments] shopToken:', shopToken, 'includeInactive:', includeInactive);
 
     if (!shopToken) {
       console.log('[GET /equipments] No shop token provided');
       return c.json({ error: "Token da loja é obrigatório" }, 400);
     }
 
-    console.log('[GET /equipments] Calling getManualEquipments...');
-    const equipments = await db.getManualEquipments(shopToken);
-    console.log('[GET /equipments] Success! Found', equipments.length, 'equipments');
+    const supabase = db.getSupabaseClient();
+    
+    let query = supabase
+      .from('equipments_manual')
+      .select('*')
+      .eq('shop_token', shopToken);
+
+    // Por padrão, retorna apenas ativos
+    if (!includeInactive) {
+      query = query.eq('active', true);
+    }
+
+    const { data: equipments, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[GET /equipments] Error:', error);
+      return c.json({ error: "Erro ao buscar equipamentos" }, 500);
+    }
+
+    console.log('[GET /equipments] Success! Found', equipments?.length || 0, 'equipments');
 
     // Debug: Log warranty data for sold equipments
     const soldEquipments = equipments.filter(eq => eq.sold || eq.status === 'sold');
@@ -1110,6 +1241,29 @@ app.post("/make-server-9bef0ec0/equipments", async (c) => {
       return c.json({ error: "Token da loja é obrigatório" }, 400);
     }
 
+    const supabase = db.getSupabaseClient();
+
+    // Validar duplicata: device + brand + model + serialNumber (todos os 4 campos)
+    const { data: existing, error: checkError } = await supabase
+      .from('equipments_manual')
+      .select('id, active')
+      .eq('shop_token', shopToken)
+      .eq('device', data.device)
+      .eq('brand', data.brand)
+      .eq('model', data.model)
+      .eq('serial_number', data.serialNumber || '');
+
+    if (checkError) {
+      console.error('[POST /equipments] Error checking duplicate:', checkError);
+    }
+
+    if (existing && existing.length > 0) {
+      const status = existing[0].active ? 'ativo' : 'inativo';
+      return c.json({ 
+        error: `Equipamento já cadastrado no sistema (${status}). Verifique: Tipo de Aparelho, Marca, Modelo e Número de Série.`
+      }, 400);
+    }
+
     const equipment = await db.createManualEquipment({
       shop_token: shopToken,
       brand: data.brand,
@@ -1117,6 +1271,7 @@ app.post("/make-server-9bef0ec0/equipments", async (c) => {
       device: data.device,
       serial_number: data.serialNumber,
       notes: data.notes,
+      active: true,
     });
 
     return c.json({ success: true, equipment });
@@ -1205,7 +1360,7 @@ app.delete("/make-server-9bef0ec0/equipments/:id", async (c) => {
       return c.json({ error: "Equipment ID is required" }, 400);
     }
 
-    console.log(`[DELETE] Attempting to delete equipment ${id}`);
+    console.log(`[DELETE /equipments] Attempting to delete equipment ${id}`);
 
     const supabase = db.getSupabaseClient();
     
@@ -1217,48 +1372,103 @@ app.delete("/make-server-9bef0ec0/equipments/:id", async (c) => {
       .single();
 
     if (fetchError || !equipment) {
-      console.log(`[DELETE] Equipment not found: ${id}`);
-      return c.json({ error: "Equipment not found" }, 404);
+      console.log(`[DELETE /equipments] Equipment not found: ${id}`);
+      return c.json({ error: "Equipamento não encontrado" }, 404);
     }
 
-    // Check if equipment has associated service orders
-    const { data: orders, error: ordersError } = await supabase
+    // Check if equipment has service orders
+    const { data: serviceOrders, error: osError } = await supabase
       .from('service_orders')
       .select('id')
-      .eq('equipment_brand', equipment.brand)
-      .eq('equipment_model', equipment.model)
+      .eq('equipment_manual_id', id)
       .limit(1);
 
-    if (ordersError) {
-      console.log(`[DELETE] Error checking service orders:`, ordersError);
-      return c.json({ error: "Error checking service orders" }, 500);
+    if (osError) {
+      console.log(`[DELETE /equipments] Error checking service orders:`, osError);
+      return c.json({ error: "Erro ao verificar ordens de serviço" }, 500);
     }
 
-    if (orders && orders.length > 0) {
+    if (serviceOrders && serviceOrders.length > 0) {
+      // Has service orders - soft delete (inactivate)
+      console.log(`[DELETE /equipments] Equipment has service orders, inactivating`);
+      const { error: updateError } = await supabase
+        .from('equipments_manual')
+        .update({ active: false })
+        .eq('id', id);
+
+      if (updateError) {
+        console.log(`[DELETE /equipments] Error inactivating equipment:`, updateError);
+        return c.json({ error: "Erro ao inativar equipamento" }, 500);
+      }
+
+      console.log(`[DELETE /equipments] Equipment ${id} inactivated successfully`);
       return c.json({ 
-        error: "Cannot delete equipment with associated service orders" 
-      }, 400);
+        success: true, 
+        action: 'inactivated',
+        message: 'Equipamento inativado pois possui ordens de serviço associadas'
+      });
+    } else {
+      // No service orders - hard delete
+      console.log(`[DELETE /equipments] No service orders, deleting permanently`);
+      const { error: deleteError } = await supabase
+        .from('equipments_manual')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        console.log(`[DELETE] Error deleting equipment:`, deleteError);
+        return c.json({ error: "Erro ao excluir equipamento" }, 500);
+      }
+
+      console.log(`[DELETE] Equipment ${id} deleted successfully`);
+      return c.json({ 
+        success: true,
+        action: 'deleted',
+        message: 'Equipamento excluído permanentemente'
+      });
     }
-
-    // Delete equipment
-    const { error: deleteError } = await supabase
-      .from('equipments_manual')
-      .delete()
-      .eq('id', id);
-
-    if (deleteError) {
-      console.log(`[DELETE] Error deleting equipment:`, deleteError);
-      return c.json({ error: "Error deleting equipment" }, 500);
-    }
-
-    console.log(`[DELETE] Equipment ${id} deleted successfully`);
-    return c.json({ success: true });
 
   } catch (error) {
     console.log(`Delete equipment error: ${error}`);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return c.json({ 
       error: "Error deleting equipment",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Reactivate equipment
+app.put("/make-server-9bef0ec0/equipments/:id/reactivate", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Equipment ID is required" }, 400);
+    }
+
+    console.log(`[PUT /equipments/reactivate] Reactivating equipment ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { error: updateError } = await supabase
+      .from('equipments_manual')
+      .update({ active: true })
+      .eq('id', id);
+
+    if (updateError) {
+      console.log(`[PUT /equipments/reactivate] Error:`, updateError);
+      return c.json({ error: "Erro ao reativar equipamento" }, 500);
+    }
+
+    console.log(`[PUT /equipments/reactivate] Equipment ${id} reactivated successfully`);
+    return c.json({ success: true, message: 'Equipamento reativado com sucesso' });
+
+  } catch (error) {
+    console.log(`Reactivate equipment error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao reativar equipamento",
       details: errorMessage 
     }, 500);
   }
@@ -1516,20 +1726,27 @@ app.delete("/make-server-9bef0ec0/stock-parts/:id", async (c) => {
 app.get("/make-server-9bef0ec0/pieces", async (c) => {
   try {
     const shopToken = c.req.query('shopToken');
+    const includeInactive = c.req.query('includeInactive') === 'true';
 
     if (!shopToken) {
       return c.json({ error: "Shop token is required" }, 400);
     }
 
-    console.log(`[GET /pieces] Fetching pieces for shop ${shopToken}`);
+    console.log(`[GET /pieces] Fetching pieces for shop ${shopToken}, includeInactive:`, includeInactive);
 
     const supabase = db.getSupabaseClient();
     
-    const { data: pieces, error } = await supabase
+    let query = supabase
       .from('pieces_manual')
       .select('*')
-      .eq('shop_token', shopToken)
-      .order('created_at', { ascending: false });
+      .eq('shop_token', shopToken);
+
+    // Por padrão, retorna apenas ativos
+    if (!includeInactive) {
+      query = query.eq('active', true);
+    }
+
+    const { data: pieces, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error(`[GET /pieces] Error:`, error);
@@ -1568,6 +1785,26 @@ app.post("/make-server-9bef0ec0/pieces", async (c) => {
 
     const supabase = db.getSupabaseClient();
     
+    // Validar duplicata: name + partType + serialNumber (todos os 3 campos)
+    const { data: existing, error: checkError } = await supabase
+      .from('pieces_manual')
+      .select('id, active')
+      .eq('shop_token', shopToken)
+      .eq('name', name)
+      .eq('part_type', partType)
+      .eq('serial_number', serialNumber || '');
+
+    if (checkError) {
+      console.error('[POST /pieces] Error checking duplicate:', checkError);
+    }
+
+    if (existing && existing.length > 0) {
+      const status = existing[0].active ? 'ativa' : 'inativa';
+      return c.json({ 
+        error: `Peça já cadastrada no sistema (${status}). Verifique: Nome da Peça, Tipo da Peça e Número de Série.`
+      }, 400);
+    }
+
     const { data: piece, error } = await supabase
       .from('pieces_manual')
       .insert({
@@ -1576,6 +1813,7 @@ app.post("/make-server-9bef0ec0/pieces", async (c) => {
         part_type: partType,
         serial_number: serialNumber || null,
         notes: notes || null,
+        active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -1710,16 +1948,29 @@ app.delete("/make-server-9bef0ec0/pieces/:id", async (c) => {
       return c.json({ error: "Erro ao verificar uso no estoque" }, 500);
     }
 
+    // If has stock movements, only inactivate (soft delete)
     if (stockParts && stockParts.length > 0) {
-      console.log(`[DELETE /pieces] Piece is in use in ${stockParts.length} stock entries`);
+      console.log(`[DELETE /pieces] Piece has stock movements, inactivating instead of deleting`);
+      
+      const { error: updateError } = await supabase
+        .from('pieces_manual')
+        .update({ active: false })
+        .eq('id', id);
+
+      if (updateError) {
+        console.log(`[DELETE /pieces] Error inactivating:`, updateError);
+        return c.json({ error: "Erro ao inativar peça" }, 500);
+      }
+
       return c.json({ 
-        error: "Não é possível excluir esta peça porque ela está sendo usada no estoque. Remova primeiro todas as movimentações desta peça." 
-      }, 400);
+        success: true, 
+        action: 'inactivated',
+        message: 'Peça inativada (possui movimentações no estoque)'
+      });
     }
 
-    console.log(`[DELETE /pieces] Piece is not in use, proceeding with deletion`);
-
-    // Delete piece
+    // No stock movements, can delete permanently
+    console.log(`[DELETE /pieces] No stock movements found, deleting permanently`);
     const { error: deleteError } = await supabase
       .from('pieces_manual')
       .delete()
@@ -1731,13 +1982,53 @@ app.delete("/make-server-9bef0ec0/pieces/:id", async (c) => {
     }
 
     console.log(`[DELETE /pieces] Piece ${id} deleted successfully`);
-    return c.json({ success: true });
+    return c.json({ 
+      success: true,
+      action: 'deleted',
+      message: 'Peça excluída permanentemente'
+    });
 
   } catch (error) {
     console.log(`Delete piece error: ${error}`);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return c.json({ 
       error: "Error deleting piece",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Reactivate piece
+app.put("/make-server-9bef0ec0/pieces/:id/reactivate", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Piece ID is required" }, 400);
+    }
+
+    console.log(`[PUT /pieces/reactivate] Reactivating piece ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { error: updateError } = await supabase
+      .from('pieces_manual')
+      .update({ active: true })
+      .eq('id', id);
+
+    if (updateError) {
+      console.log(`[PUT /pieces/reactivate] Error:`, updateError);
+      return c.json({ error: "Erro ao reativar peça" }, 500);
+    }
+
+    console.log(`[PUT /pieces/reactivate] Piece ${id} reactivated successfully`);
+    return c.json({ success: true, message: 'Peça reativada com sucesso' });
+
+  } catch (error) {
+    console.log(`Reactivate piece error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao reativar peça",
       details: errorMessage 
     }, 500);
   }

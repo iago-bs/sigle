@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import type { Piece } from "../types";
-import { useSystemVariables } from "../hooks/useSystemVariables";
 
 interface EditPieceModalProps {
   isOpen: boolean;
@@ -12,21 +11,10 @@ interface EditPieceModalProps {
 }
 
 export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceModalProps) {
-  const { variables, addVariable, refresh } = useSystemVariables();
   const [name, setName] = useState("");
   const [partType, setPartType] = useState("");
-  const [customPartType, setCustomPartType] = useState("");
-  const [showCustomPartType, setShowCustomPartType] = useState(false);
   const [serialNumber, setSerialNumber] = useState("");
   const [notes, setNotes] = useState("");
-
-  // Carregar variáveis quando o modal abrir
-  useEffect(() => {
-    if (isOpen) {
-      refresh();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   // Preencher formulário quando peça mudar
   useEffect(() => {
@@ -35,26 +23,13 @@ export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceMo
       setPartType(piece.partType);
       setSerialNumber(piece.serialNumber || "");
       setNotes(piece.notes || "");
-      setShowCustomPartType(false);
-      setCustomPartType("");
     }
   }, [piece]);
-
-  // Get part types from variables
-  const partTypes = variables
-    .filter((v) => v.category === "part_types")
-    .map((v) => v.value);
-
-  // Filter out duplicate "Outro" entries
-  const uniquePartTypes = [...partTypes.filter(pt => pt !== "Outro"), "Outro"];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!piece) return;
-
-    // Get final part type value (use custom if "Outro" is selected)
-    const finalPartType = partType === "Outro" ? customPartType : partType;
 
     // Validation
     if (!name.trim()) {
@@ -62,24 +37,16 @@ export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceMo
       return;
     }
 
-    if (!finalPartType.trim()) {
-      toast.error("Por favor, selecione ou digite o tipo da peça");
+    if (!partType.trim()) {
+      toast.error("Por favor, digite o tipo da peça");
       return;
     }
 
     try {
-      // Save custom part type to variables if needed
-      if (partType === "Outro" && customPartType.trim()) {
-        const added = addVariable("part_types", customPartType.trim());
-        if (added) {
-          console.log("Custom part type saved:", customPartType);
-        }
-      }
-
       const updatedPiece: Piece = {
         ...piece,
         name: name.trim(),
-        partType: finalPartType.trim(),
+        partType: partType.trim(),
         serialNumber: serialNumber.trim() || undefined,
         notes: notes.trim() || undefined,
       };
@@ -89,8 +56,6 @@ export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceMo
       // Reset form
       setName("");
       setPartType("");
-      setCustomPartType("");
-      setShowCustomPartType(false);
       setSerialNumber("");
       setNotes("");
       
@@ -104,8 +69,6 @@ export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceMo
   const handleClose = () => {
     setName("");
     setPartType("");
-    setCustomPartType("");
-    setShowCustomPartType(false);
     setSerialNumber("");
     setNotes("");
     onClose();
@@ -149,40 +112,15 @@ export function EditPieceModal({ isOpen, onClose, piece, onUpdate }: EditPieceMo
             <label className="block text-sm font-medium mb-1">
               Tipo <span className="text-red-500">*</span>
             </label>
-            <select
+            <input
+              type="text"
               value={partType}
-              onChange={(e) => {
-                setPartType(e.target.value);
-                setShowCustomPartType(e.target.value === "Outro");
-              }}
+              onChange={(e) => setPartType(e.target.value)}
+              placeholder="Ex: Placa Principal, Fonte, Inversor"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#8b7355]"
               required
-            >
-              <option value="">Selecione o tipo</option>
-              {uniquePartTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+            />
           </div>
-
-          {/* Custom Part Type */}
-          {showCustomPartType && (
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Digite o novo tipo <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={customPartType}
-                onChange={(e) => setCustomPartType(e.target.value)}
-                placeholder="Ex: Processador, Memória RAM, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#8b7355]"
-                required={showCustomPartType}
-              />
-            </div>
-          )}
 
           {/* Número de Série */}
           <div>

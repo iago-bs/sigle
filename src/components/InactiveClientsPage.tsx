@@ -37,10 +37,10 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
   const filteredClients = inactiveClients.filter((client) => {
     const query = searchQuery.toLowerCase();
     return (
+      client.cpf?.toLowerCase().includes(query) ||
       client.name.toLowerCase().includes(query) ||
       client.phone.toLowerCase().includes(query) ||
-      client.email?.toLowerCase().includes(query) ||
-      client.cpf?.toLowerCase().includes(query)
+      client.email?.toLowerCase().includes(query)
     );
   });
 
@@ -63,8 +63,8 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
     if (!clientToDelete) return;
 
     try {
-      await deleteClient(clientToDelete.id);
-      toast.success(`Cliente "${clientToDelete.name}" excluído permanentemente!`);
+      const result = await deleteClient(clientToDelete.id);
+      toast.success(result.message);
       setClientToDelete(null);
       // Recarregar para atualizar a lista
       fetchClients(true);
@@ -76,19 +76,19 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#f5f1e8]">
         <p className="text-lg">Carregando clientes inativos...</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white p-6">
+    <div className="min-h-screen w-full flex flex-col bg-[#f5f1e8] p-6">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#8b7355] text-white rounded-lg hover:bg-[#7a6345] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Voltar</span>
@@ -102,16 +102,16 @@ export function InactiveClientsPage({ onBack }: InactiveClientsPageProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar cliente inativado..."
+            placeholder="Buscar por CPF, nome, telefone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+            className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#8b7355] bg-white"
           />
         </div>
       </div>
 
       {/* Info Banner */}
-      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6">
+      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded">
         <p className="text-sm text-amber-800">
           <strong>Clientes Inativados:</strong> Estes clientes foram removidos mas
           ainda podem ser restaurados. Use "Reativar" para retornar o cliente à

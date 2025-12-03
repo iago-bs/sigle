@@ -26,7 +26,7 @@ export function useEquipments() {
       setError(null);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments?shopToken=${shopToken}`,
+        `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments?shopToken=${shopToken}&includeInactive=true`,
         {
           headers: {
             'Authorization': `Bearer ${publicAnonKey}`,
@@ -68,6 +68,7 @@ export function useEquipments() {
         soldDate: eq.sold_date || undefined,
         warrantyEndDate: eq.warranty_end_date || fallbackWarrantyEnd || undefined,
         soldTo: eq.sold_to || undefined,
+        active: eq.active,
         } as Equipment;
         
         // Log para debug de equipamentos vendidos
@@ -185,7 +186,7 @@ export function useEquipments() {
   }, [shopToken, fetchEquipments]);
 
   // Deletar equipamento
-  const deleteEquipment = useCallback(async (equipmentId: string): Promise<void> => {
+  const deleteEquipment = useCallback(async (equipmentId: string): Promise<{ action: string; message: string }> => {
     console.log('[deleteEquipment] Starting deletion for:', equipmentId);
     
     const response = await fetch(
@@ -222,20 +223,16 @@ export function useEquipments() {
       throw new Error(errorMessage);
     }
 
-    // Tentar fazer parse da resposta de sucesso
-    try {
-      const text = await response.text();
-      console.log('[deleteEquipment] Success response text:', text);
-      if (text) {
-        JSON.parse(text);
-      }
-    } catch (e) {
-      console.log('[deleteEquipment] Response is not valid JSON, ignoring');
-    }
+    const data = await response.json();
+    console.log('[deleteEquipment] Response data:', data);
 
-    console.log('[deleteEquipment] Deletion successful, fetching updated list');
     // Atualizar lista local
     await fetchEquipments();
+    
+    return {
+      action: data.action || 'deleted',
+      message: data.message || 'Operação realizada com sucesso'
+    };
   }, [shopToken, fetchEquipments]);
 
   // Carregar equipamentos ao montar ou quando shopToken mudar
