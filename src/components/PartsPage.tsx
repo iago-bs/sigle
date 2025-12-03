@@ -2,9 +2,7 @@ import { ArrowLeft, Search, Plus, Pencil, Trash2, Archive, History, Package } fr
 import { useState, useMemo } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import type { Part, StockPart, ServiceOrder, Piece } from "../types";
-
-import type { OnlinePart } from "../types";
+import type { Part, StockPart, Piece } from "../types";
 
 type TabType = "stock" | "history";
 
@@ -21,46 +19,27 @@ interface PartsPageProps {
   parts: Part[];
   stockParts: StockPart[];
   pieces: Piece[];
-  onlineParts: OnlinePart[];
-  serviceOrders: ServiceOrder[];
   onAddPart: () => void;
   onAddStockPart: () => void;
-  onAddOnlinePart: () => void;
   onEditPart: (part: Part) => void;
   onDeletePart: (id: string) => void;
   onEditStockPart: (stockPart: StockPart, isIndividual?: boolean) => void;
   onDeleteStockPart: (id: string) => void; // Para aba Estoque (cria entrada negativa)
   onDeleteIndividualStockPart: (id: string) => void; // Para aba Movimentações (deleta registro)
-  onEditOnlinePart: (onlinePart: OnlinePart) => void;
-  onDeleteOnlinePart: (id: string) => void;
-  onSelectServiceOrder: (serviceOrder: ServiceOrder) => void;
 }
-
-const statusConfig = {
-  "to-order": { label: "À Pedir", color: "bg-red-100 text-red-800 border-red-300" },
-  "ordered": { label: "Pedido Realizado", color: "bg-yellow-100 text-yellow-800 border-yellow-300" },
-  "arriving": { label: "À Chegar", color: "bg-blue-100 text-blue-800 border-blue-300" },
-  "received": { label: "Recebido", color: "bg-green-100 text-green-800 border-green-300" },
-};
 
 export function PartsPage({ 
   onBack, 
   parts, 
   stockParts,
   pieces,
-  onlineParts,
-  serviceOrders,
   onAddPart, 
   onAddStockPart,
-  onAddOnlinePart,
   onEditPart, 
   onDeletePart,
   onEditStockPart,
   onDeleteStockPart,
   onDeleteIndividualStockPart,
-  onEditOnlinePart,
-  onDeleteOnlinePart,
-  onSelectServiceOrder,
 }: PartsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentTab, setCurrentTab] = useState<TabType>("stock");
@@ -335,7 +314,7 @@ export function PartsPage({
                         </div>
                         <div>
                           <span className="text-gray-600">Data:</span>
-                          <span className="ml-1 font-medium">{formatDate(stockPart.addedAt)}</span>
+                          <span className="ml-1 font-medium">{formatDate(stockPart.added_at || stockPart.addedAt)}</span>
                         </div>
                       </div>
                     </div>

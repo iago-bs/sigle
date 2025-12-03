@@ -15,7 +15,6 @@ interface RightSidebarProps {
   onNavigateToPieces: () => void;
   onNavigateToParts: () => void;
   onNavigateToEquipments: () => void;
-  onManageTechnicians: () => void;
   onLogout: () => void;
 }
 

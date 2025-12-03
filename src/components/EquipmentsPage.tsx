@@ -18,10 +18,8 @@ import { toast } from "sonner";
 
 interface EquipmentsPageProps {
   onBack: () => void;
-  serviceOrders: ServiceOrder[];
   equipments: Equipment[];
   clients: Client[];
-  onViewServiceOrder: (serviceOrder: ServiceOrder) => void;
   onAddEquipment: () => void;
   onEditEquipment: (equipment: Equipment) => void;
   onDeleteEquipment: (equipmentId: string) => Promise<void>;
@@ -146,7 +144,7 @@ function formatDate(dateString: string): string {
   });
 }
 
-export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipments, clients, onViewServiceOrder, onAddEquipment, onEditEquipment, onDeleteEquipment, onReactivateEquipment, onCreateClient }: EquipmentsPageProps) {
+export function EquipmentsPage({ onBack, equipments: manualEquipments, clients, onAddEquipment, onEditEquipment, onDeleteEquipment, onReactivateEquipment, onCreateClient }: EquipmentsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentStats | null>(null);
   const [activeTab, setActiveTab] = useState<"disponiveis" | "vendidos" | "garantia">("disponiveis");
@@ -155,16 +153,16 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
   // Atualizar selectedEquipment quando equipments mudar (após edição)
   useEffect(() => {
     if (selectedEquipment && selectedEquipment.equipmentId) {
-      const allEquipments = groupServiceOrdersByEquipment(serviceOrders, manualEquipments);
+      const allEquipments = groupServiceOrdersByEquipment([], manualEquipments);
       const updated = allEquipments.find(eq => eq.equipmentId === selectedEquipment.equipmentId);
       if (updated) {
         setSelectedEquipment(updated);
       }
     }
-  }, [manualEquipments, serviceOrders]);
+  }, [manualEquipments]);
 
-  // Agrupar equipamentos (mesclar manuais + O.S)
-  const allEquipments = groupServiceOrdersByEquipment(serviceOrders, manualEquipments);
+  // Agrupar equipamentos (apenas manuais, sem O.S)
+  const allEquipments = groupServiceOrdersByEquipment([], manualEquipments);
 
   // Filtrar por status (ativos vs inativos)
   const now = new Date();
@@ -269,8 +267,7 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
               <h1 className="text-[#181717] font-['Lexend_Deca']">Equipamentos - Análise Estatística</h1>
               <p className="text-sm text-gray-600">
                 {allEquipments.length} modelo{allEquipments.length !== 1 ? "s" : ""} diferente
-                {allEquipments.length !== 1 ? "s" : ""} • {serviceOrders.length} O.S registrada
-                {serviceOrders.length !== 1 ? "s" : ""}
+                {allEquipments.length !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -515,10 +512,9 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                     return dateA.getTime() - dateB.getTime();
                   })
                   .map((os) => (
-                    <button
+                    <div
                       key={os.id}
-                      onClick={() => onViewServiceOrder(os)}
-                      className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg border border-gray-100 transition-colors text-left"
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-100 text-left"
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -557,7 +553,7 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                       <div className="text-right text-sm text-gray-500">
                         {formatDate(os.entry_date || os.created_at || "")}
                       </div>
-                    </button>
+                    </div>
                   ))}
               </div>
             </div>
@@ -758,13 +754,7 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
               {displayEquipments.length !== 1 ? "s" : ""}
             </span>
             <div className="flex gap-4">
-              <span>Total de O.S: {serviceOrders.length}</span>
-              <span>
-                Média de serviços por modelo:{" "}
-                {allEquipments.length > 0
-                  ? (serviceOrders.length / allEquipments.length).toFixed(1)
-                  : "0"}
-              </span>
+              <span>Total de equipamentos cadastrados</span>
             </div>
           </div>
         </div>
