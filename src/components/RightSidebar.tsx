@@ -1,39 +1,19 @@
 import {
-  FileText,
-  ShieldCheck,
-  FileEdit,
-  Receipt,
   Wrench,
   User,
   Settings,
-  UserCog,
   Laptop,
   LogOut,
+  Package,
 } from "lucide-react";
-import { Badge } from "./ui/badge";
 import type { AuthUser } from "../hooks/useAuth";
-
-// TODO: Backend - Replace with real notification counts from database
-const menuItems = [
-  { icon: FileText, label: "HISTÓRICO", badge: 0 },
-  { icon: ShieldCheck, label: "GARANTIAS", badge: 3 },
-  { icon: FileEdit, label: "ORÇAMENTOS", badge: 5 },
-  { icon: Receipt, label: "NOTAS FISCAIS", badge: 0 },
-  { icon: Wrench, label: "PEÇAS", badge: 2 },
-  { icon: User, label: "CLIENTE", badge: 0 },
-  { icon: Settings, label: "CONFIGURAÇÕES", badge: 0 },
-];
 
 interface RightSidebarProps {
   currentUser?: AuthUser | null;
-  onAddServiceOrder: () => void;
   onAddClient: () => void;
-  onNavigateToHistory: () => void;
   onNavigateToClients: () => void;
+  onNavigateToPieces: () => void;
   onNavigateToParts: () => void;
-  onNavigateToWarranties: () => void;
-  onNavigateToBudgets: () => void;
-  onNavigateToInvoices: () => void;
   onNavigateToEquipments: () => void;
   onNavigateToVariables: () => void;
   onManageTechnicians: () => void;
@@ -42,17 +22,12 @@ interface RightSidebarProps {
 
 export function RightSidebar({
   currentUser,
-  onAddServiceOrder,
   onAddClient,
-  onNavigateToHistory,
   onNavigateToClients,
+  onNavigateToPieces,
   onNavigateToParts,
-  onNavigateToWarranties,
-  onNavigateToBudgets,
-  onNavigateToInvoices,
   onNavigateToEquipments,
   onNavigateToVariables,
-  onManageTechnicians,
   onLogout,
 }: RightSidebarProps) {
   return (
@@ -86,7 +61,6 @@ export function RightSidebar({
           SYSTEM
         </div>
         
-        {/* Current User Greeting */}
         {currentUser && (
           <div
             className="mt-2 text-white/90"
@@ -103,8 +77,9 @@ export function RightSidebar({
       </div>
 
       <button
-        onClick={onAddServiceOrder}
-        className="bg-[#d4c5a0] text-black rounded-full py-2 px-4 mb-1.5 flex items-center justify-center gap-2 hover:bg-[#c4b590] transition-colors"
+        disabled
+        className="bg-gray-300 text-gray-500 rounded-full py-2 px-4 mb-1.5 flex items-center justify-center gap-2 cursor-not-allowed opacity-50"
+        title="Funcionalidade desabilitada"
       >
         <span className="text-2xl">+</span>
         <span
@@ -137,126 +112,6 @@ export function RightSidebar({
       </button>
 
       <nav className="flex flex-col gap-1.5 flex-1">
-        {/* HISTÓRICO button - now functional */}
-        <button
-          onClick={onNavigateToHistory}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <FileText className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            HISTÓRICO
-          </span>
-        </button>
-
-        {/* GARANTIAS button */}
-        <button
-          onClick={onNavigateToWarranties}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            GARANTIAS
-          </span>
-          {3 > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs rounded-full"
-            >
-              3
-            </Badge>
-          )}
-        </button>
-
-        {/* ORÇAMENTOS button */}
-        <button
-          onClick={onNavigateToBudgets}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <FileEdit className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            ORÇAMENTOS
-          </span>
-          {5 > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs rounded-full"
-            >
-              5
-            </Badge>
-          )}
-        </button>
-
-        {/* NOTAS FISCAIS button */}
-        <button
-          onClick={onNavigateToInvoices}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <Receipt className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            NOTAS FISCAIS
-          </span>
-        </button>
-
-        {/* PEÇAS button - now functional */}
-        <button
-          onClick={onNavigateToParts}
-          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
-        >
-          <Wrench className="w-4 h-4 flex-shrink-0" />
-          <span
-            style={{
-              fontFamily: "Lexend Deca, sans-serif",
-              fontSize: "9px",
-              fontWeight: 300,
-              letterSpacing: "0.4px",
-              textAlign: "center",
-            }}
-          >
-            PEÇAS
-          </span>
-          {2 > 0 && (
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs rounded-full"
-            >
-              2
-            </Badge>
-          )}
-        </button>
-
-        {/* EQUIPAMENTOS button - Análise estatística */}
         <button
           onClick={onNavigateToEquipments}
           className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
@@ -275,7 +130,42 @@ export function RightSidebar({
           </span>
         </button>
 
-        {/* VARIÁVEIS button */}
+        <button
+          onClick={onNavigateToPieces}
+          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
+        >
+          <Wrench className="w-4 h-4 flex-shrink-0" />
+          <span
+            style={{
+              fontFamily: "Lexend Deca, sans-serif",
+              fontSize: "9px",
+              fontWeight: 300,
+              letterSpacing: "0.4px",
+              textAlign: "center",
+            }}
+          >
+            PEÇAS
+          </span>
+        </button>
+
+        <button
+          onClick={onNavigateToParts}
+          className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
+        >
+          <Package className="w-4 h-4 flex-shrink-0" />
+          <span
+            style={{
+              fontFamily: "Lexend Deca, sans-serif",
+              fontSize: "9px",
+              fontWeight: 300,
+              letterSpacing: "0.4px",
+              textAlign: "center",
+            }}
+          >
+            ESTOQUE
+          </span>
+        </button>
+
         <button
           onClick={onNavigateToVariables}
           className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
@@ -294,7 +184,6 @@ export function RightSidebar({
           </span>
         </button>
 
-        {/* CLIENTE button - now functional */}
         <button
           onClick={onNavigateToClients}
           className="flex items-center justify-center gap-2 py-1.5 px-2 hover:bg-[#7a6345] rounded-lg transition-colors relative"
@@ -314,9 +203,7 @@ export function RightSidebar({
         </button>
       </nav>
 
-      {/* Bottom Section - Logout */}
       <div className="mt-auto pt-3 border-t border-[#7a6345]">
-        {/* Logout Button */}
         <button
           onClick={onLogout}
           className="w-full flex items-center justify-center gap-2 py-2 px-2 hover:bg-[#6d5a43] rounded-lg transition-colors"

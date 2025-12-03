@@ -24,16 +24,12 @@ interface MainLayoutProps {
   onSelectServiceOrder?: (serviceOrder: ServiceOrder) => void;
   onMoveCard: (dragIndex: number, hoverIndex: number) => void;
   onToggleDelivered: (serviceOrder: ServiceOrder) => void;
-  onAddServiceOrder: () => void;
   onAddClient: () => void;
   onAddAppointment: () => void;
   onAddPart: () => void;
-  onNavigateToHistory: () => void;
   onNavigateToClients: () => void;
+  onNavigateToPieces: () => void;
   onNavigateToParts: () => void;
-  onNavigateToWarranties: () => void;
-  onNavigateToBudgets: () => void;
-  onNavigateToInvoices: () => void;
   onNavigateToEquipments: () => void;
   onNavigateToVariables: () => void;
   onManageTechnicians: () => void;
@@ -53,16 +49,12 @@ export function MainLayout({
   onSelectServiceOrder,
   onMoveCard,
   onToggleDelivered,
-  onAddServiceOrder,
   onAddClient,
   onAddAppointment,
   onAddPart,
-  onNavigateToHistory,
   onNavigateToClients,
+  onNavigateToPieces,
   onNavigateToParts,
-  onNavigateToWarranties,
-  onNavigateToBudgets,
-  onNavigateToInvoices,
   onNavigateToEquipments,
   onNavigateToVariables,
   onManageTechnicians,
@@ -288,16 +280,12 @@ export function MainLayout({
 
       {/* Right Sidebar */}
       <div className="w-[200px] flex-shrink-0 h-screen">
-        <RightSidebar 
+        <RightSidebar
           currentUser={currentUser}
-          onAddServiceOrder={onAddServiceOrder}
           onAddClient={onAddClient}
-          onNavigateToHistory={onNavigateToHistory}
           onNavigateToClients={onNavigateToClients}
+          onNavigateToPieces={onNavigateToPieces}
           onNavigateToParts={onNavigateToParts}
-          onNavigateToWarranties={onNavigateToWarranties}
-          onNavigateToBudgets={onNavigateToBudgets}
-          onNavigateToInvoices={onNavigateToInvoices}
           onNavigateToEquipments={onNavigateToEquipments}
           onNavigateToVariables={onNavigateToVariables}
           onManageTechnicians={onManageTechnicians}

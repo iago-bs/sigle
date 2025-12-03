@@ -4,20 +4,19 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
-import { DEVICE_TYPES, BRANDS, PRODUCT_COLORS } from "../lib/constants";
 import type { Equipment } from "../types";
 import { useState, useEffect } from "react";
-import { useDropdownOptions } from "../hooks/useDropdownOptions";
 import { useSystemVariables } from "../hooks/useSystemVariables";
 import { toast } from "sonner";
 
-interface AddEquipmentModalProps {
+interface EditEquipmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateEquipment: (equipment: Equipment) => void;
+  equipment: Equipment | null;
+  onUpdateEquipment: (equipment: Equipment) => void;
 }
 
-export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: AddEquipmentModalProps) {
+export function EditEquipmentModal({ open, onOpenChange, equipment, onUpdateEquipment }: EditEquipmentModalProps) {
   const { addVariable, refresh, variables } = useSystemVariables();
   
   // Recarregar variáveis quando o modal abrir
@@ -61,6 +60,32 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
   const [showCustomBrand, setShowCustomBrand] = useState(false);
   const [showCustomColor, setShowCustomColor] = useState(false);
 
+  // Populate form when equipment changes
+  useEffect(() => {
+    if (equipment) {
+      const isCustomDevice = equipment.device && !deviceTypes.includes(equipment.device);
+      const isCustomBrand = equipment.brand && !brands.includes(equipment.brand);
+      const isCustomColor = equipment.color && !productColors.includes(equipment.color);
+
+      setFormData({
+        device: isCustomDevice ? "Outro" : equipment.device || "",
+        customDevice: isCustomDevice ? equipment.device || "" : "",
+        brand: isCustomBrand ? "Outro" : equipment.brand || "",
+        customBrand: isCustomBrand ? equipment.brand || "" : "",
+        model: equipment.model || "",
+        color: isCustomColor ? "Outro" : (equipment.color || ""),
+        customColor: isCustomColor ? (equipment.color || "") : "",
+        serialNumber: equipment.serialNumber || "",
+        notes: equipment.notes || "",
+      });
+
+      setShowCustomDevice(isCustomDevice);
+      setShowCustomBrand(isCustomBrand);
+      setShowCustomColor(isCustomColor);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment?.id]);
+
   // Handle device selection
   const handleDeviceChange = (value: string) => {
     setFormData({ ...formData, device: value, customDevice: "" });
@@ -81,6 +106,8 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!equipment) return;
     
     // Get final values (use custom if "Outro" is selected)
     const finalDevice = formData.device === "Outro" ? formData.customDevice : formData.device;
@@ -109,61 +136,30 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
       }
     }
 
-    const newEquipment: Equipment = {
-      id: Date.now().toString(),
+    const updatedEquipment: Equipment = {
+      ...equipment,
       device: finalDevice,
       brand: finalBrand,
       model: formData.model,
       color: finalColor || undefined,
       serialNumber: formData.serialNumber || undefined,
       notes: formData.notes || undefined,
-      lastServiceDate: new Date().toISOString(),
-      totalServices: 0,
     };
 
-    onCreateEquipment(newEquipment);
-    
-    // Reset form
-    resetForm();
-    
+    onUpdateEquipment(updatedEquipment);
     onOpenChange(false);
   };
 
-  const resetForm = () => {
-    setFormData({
-      device: "",
-      customDevice: "",
-      brand: "",
-      customBrand: "",
-      model: "",
-      color: "",
-      customColor: "",
-      serialNumber: "",
-      notes: "",
-    });
-    setShowCustomDevice(false);
-    setShowCustomBrand(false);
-    setShowCustomColor(false);
-  };
-
-  // Reset form when modal closes
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      resetForm();
-    }
-    onOpenChange(open);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Adicionar Equipamento</DialogTitle>
+          <DialogTitle>Editar Equipamento</DialogTitle>
           <DialogDescription>
-            Cadastre um novo equipamento manualmente para rastreamento
+            Atualize as informações do equipamento
           </DialogDescription>
         </DialogHeader>
-        <form id="create-equipment-form" onSubmit={handleSubmit} className="space-y-4">
+        <form id="edit-equipment-form" onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="device">Tipo de Aparelho *</Label>
@@ -289,13 +285,13 @@ export function AddEquipmentModal({ open, onOpenChange, onCreateEquipment }: Add
         <DialogFooter>
           <Button 
             type="submit" 
-            form="create-equipment-form" 
+            form="edit-equipment-form" 
             className="bg-[#8b7355] hover:bg-[#7a6345]"
             disabled={!formData.device || !formData.brand || !formData.model}
           >
-            Adicionar Equipamento
+            Salvar Alterações
           </Button>
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
         </DialogFooter>

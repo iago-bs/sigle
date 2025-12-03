@@ -177,6 +177,7 @@ export function useSystemVariables() {
   // Load data on mount
   useEffect(() => {
     loadVariables();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

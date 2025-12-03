@@ -135,6 +135,109 @@ export function useEquipments() {
     return data.equipment;
   }, [shopToken, fetchEquipments]);
 
+  // Atualizar equipamento
+  const updateEquipment = useCallback(async (equipment: Equipment): Promise<void> => {
+    console.log('[updateEquipment] Starting update for:', equipment.id);
+    
+    const response = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments/${equipment.id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          brand: equipment.brand,
+          model: equipment.model,
+          device: equipment.device,
+          serialNumber: equipment.serialNumber,
+          notes: equipment.notes,
+        }),
+      }
+    );
+
+    console.log('[updateEquipment] Response status:', response.status);
+    console.log('[updateEquipment] Response ok:', response.ok);
+
+    if (!response.ok) {
+      let errorMessage = 'Erro ao atualizar equipamento';
+      try {
+        const text = await response.text();
+        console.log('[updateEquipment] Error response text:', text);
+        
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+        
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`;
+        }
+      } catch (e) {
+        console.error('[updateEquipment] Error parsing error response:', e);
+        errorMessage = `Erro ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    console.log('[updateEquipment] Update successful, fetching updated list');
+    // Atualizar lista local
+    await fetchEquipments();
+  }, [shopToken, fetchEquipments]);
+
+  // Deletar equipamento
+  const deleteEquipment = useCallback(async (equipmentId: string): Promise<void> => {
+    console.log('[deleteEquipment] Starting deletion for:', equipmentId);
+    
+    const response = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments/${equipmentId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+      }
+    );
+
+    console.log('[deleteEquipment] Response status:', response.status);
+    console.log('[deleteEquipment] Response ok:', response.ok);
+
+    if (!response.ok) {
+      let errorMessage = 'Erro ao deletar equipamento';
+      try {
+        const text = await response.text();
+        console.log('[deleteEquipment] Error response text:', text);
+        
+        // Tentar fazer parse como JSON
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.error || errorMessage;
+        
+        // Se tiver detalhes, adicionar
+        if (errorData.details) {
+          errorMessage += `: ${errorData.details}`;
+        }
+      } catch (e) {
+        console.error('[deleteEquipment] Error parsing error response:', e);
+        errorMessage = `Erro ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Tentar fazer parse da resposta de sucesso
+    try {
+      const text = await response.text();
+      console.log('[deleteEquipment] Success response text:', text);
+      if (text) {
+        JSON.parse(text);
+      }
+    } catch (e) {
+      console.log('[deleteEquipment] Response is not valid JSON, ignoring');
+    }
+
+    console.log('[deleteEquipment] Deletion successful, fetching updated list');
+    // Atualizar lista local
+    await fetchEquipments();
+  }, [shopToken, fetchEquipments]);
+
   // Carregar equipamentos ao montar ou quando shopToken mudar
   useEffect(() => {
     fetchEquipments();
@@ -147,5 +250,7 @@ export function useEquipments() {
     error,
     fetchEquipments,
     createEquipment,
+    updateEquipment,
+    deleteEquipment,
   };
 }

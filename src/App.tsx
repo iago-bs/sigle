@@ -7,7 +7,7 @@ import { toast } from "sonner";
 // Login/Token removidos no modo loja única
 
 // Types
-import type { Appointment, Part, StockPart, OnlinePart, ServiceOrder, Technician, PageType, Equipment } from "./types";
+import type { Appointment, Part, StockPart, OnlinePart, ServiceOrder, Technician, PageType, Equipment, Piece } from "./types";
 import { type Client as DBClient, useClients } from "./hooks/useClients";
 
 // Constants
@@ -31,6 +31,11 @@ import { useParts } from "./hooks/useParts";
 import { useServiceOrders } from "./hooks/useServiceOrders";
 import { useTechnicians } from "./hooks/useTechnicians";
 import { useEquipments } from "./hooks/useEquipments";
+import { usePieces } from "./hooks/usePieces";
+import { useStockParts } from "./hooks/useStockParts";
+import { AddPieceModal } from "./components/AddPieceModal";
+import { EditPieceModal } from "./components/EditPieceModal";
+import { PiecesPage } from "./components/PiecesPage";
 
 // Utils
 import { formatDateBR, calculateWarrantyEndDate } from "./lib/date-utils";
@@ -55,21 +60,11 @@ import { InactiveClientsPage } from "./components/InactiveClientsPage";
 
 // Equipamentos (Equipment)
 import { AddEquipmentModal } from "./components/AddEquipmentModal";
+import { EditEquipmentModal } from "./components/EditEquipmentModal";
 import { EquipmentsPage } from "./components/EquipmentsPage";
-
-// Garantias (Warranties)
-import { WarrantiesPage } from "./components/WarrantiesPage";
-
-// Histórico (History)
-import { HistoryPage } from "./components/HistoryPage";
 
 // Layout
 import { MainLayout } from "./components/MainLayout";
-
-// Notas Fiscais (Invoices)
-import { InvoicesPage } from "./components/InvoicesPage";
-import { InvoiceDetailModal } from "./components/InvoiceDetailModal";
-import { InvoiceDocument } from "./components/InvoiceDocument";
 
 // Ordem de Serviço (Service Orders)
 import { AddServiceOrderModal } from "./components/AddServiceOrderModal";
@@ -79,9 +74,6 @@ import { ServiceOrderCompletionModal } from "./components/ServiceOrderCompletion
 import { ServiceOrderDetailModal } from "./components/ServiceOrderDetailModal";
 import { ServiceOrderPrintPage } from "./components/ServiceOrderPrintPage";
 import { ServiceOrderReceiptPrint } from "./components/ServiceOrderReceiptPrint";
-
-// Orçamentos (Budgets)
-import { BudgetsPage } from "./components/BudgetsPage";
 
 // Peças (Parts)
 import { AddOnlinePartModal } from "./components/AddOnlinePartModal";
@@ -112,14 +104,15 @@ export default function App() {
 
   // Custom hooks for state management with Supabase
   const currentTime = useClock();
-  const { clients, setClients, createClient } = useClients();
+  const { clients, setClients, createClient, fetchClients } = useClients();
   const { parts, createPart, updatePart, deletePart } = useParts();
   const { serviceOrders, setServiceOrders, createServiceOrder, updateServiceOrder, updateStatus: updateServiceOrderStatus } = useServiceOrders();
   const { technicians } = useTechnicians();
-  const { equipments, setEquipments, fetchEquipments, createEquipment } = useEquipments();
+  const { equipments, setEquipments, fetchEquipments, createEquipment, updateEquipment, deleteEquipment } = useEquipments();
+  const { pieces, createPiece, updatePiece, deletePiece, fetchPieces } = usePieces();
+  const { stockParts, setStockParts, createStockPart, updateStockPart, deleteStockPart } = useStockParts();
   
   // Still using localStorage for these (to be migrated later)
-  const [stockParts, setStockParts] = useLocalStorage<StockPart[]>(STORAGE_KEYS.STOCK_PARTS, initialStockParts);
   const [onlineParts, setOnlineParts] = useLocalStorage<OnlinePart[]>('onlineParts', []);
   const [appointments, setAppointments] = useLocalStorage<Appointment[]>(STORAGE_KEYS.APPOINTMENTS, initialAppointments);
   
@@ -140,6 +133,13 @@ export default function App() {
   const [isStockPartModalOpen, setIsStockPartModalOpen] = useState(false);
   const [isOnlinePartModalOpen, setIsOnlinePartModalOpen] = useState(false);
   const [isEquipmentModalOpen, setIsEquipmentModalOpen] = useState(false);
+  const [isEditEquipmentModalOpen, setIsEditEquipmentModalOpen] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
+  const [isPieceModalOpen, setIsPieceModalOpen] = useState(false);
+  const [isEditPieceModalOpen, setIsEditPieceModalOpen] = useState(false);
+  const [editingPiece, setEditingPiece] = useState<Piece | null>(null);
+  const [selectedPieceFromAdd, setSelectedPieceFromAdd] = useState<Piece | null>(null);
+  const [isFromStockModal, setIsFromStockModal] = useState(false);
   const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
   const [isEditPartModalOpen, setIsEditPartModalOpen] = useState(false);
   const [isEditStockPartModalOpen, setIsEditStockPartModalOpen] = useState(false);
@@ -151,7 +151,6 @@ export default function App() {
   const [isReceiptPrintModalOpen, setIsReceiptPrintModalOpen] = useState(false);
   const [isDeliveryDateModalOpen, setIsDeliveryDateModalOpen] = useState(false);
   // Token modal removido no modo loja única
-  const [isSaleInvoiceModalOpen, setIsSaleInvoiceModalOpen] = useState(false);
   const [isFromHistory, setIsFromHistory] = useState(false);
   
   // Confirm dialog states
@@ -173,10 +172,9 @@ export default function App() {
   const [clientToEdit, setClientToEdit] = useState<DBClient | null>(null);
   const [partToEdit, setPartToEdit] = useState<Part | null>(null);
   const [stockPartToEdit, setStockPartToEdit] = useState<StockPart | null>(null);
+  const [isIndividualStockEdit, setIsIndividualStockEdit] = useState(false); // Modo de edição
   const [onlinePartToEdit, setOnlinePartToEdit] = useState<OnlinePart | null>(null);
   const [selectedServiceOrder, setSelectedServiceOrder] = useState<ServiceOrder | null>(null);
-  const [saleInvoiceOrder, setSaleInvoiceOrder] = useState<ServiceOrder | null>(null);
-  const [saleInvoiceModalType, setSaleInvoiceModalType] = useState<"detail" | "invoice">("invoice"); // Start with nota fiscal directly
   
   // Temporary states for completion flow
   const [pendingCompletionData, setPendingCompletionData] = useState<{
@@ -250,9 +248,23 @@ export default function App() {
   };
 
   // Handler to add stock part
-  const handleAddStockPart = (stockPart: StockPart) => {
-    setStockParts([...stockParts, stockPart]);
-    toast.success("Peça adicionada ao estoque com sucesso!");
+  const handleAddStockPart = async (stockPartData: Omit<StockPart, 'id' | 'shop_token' | 'created_at' | 'updated_at'>) => {
+    try {
+      await createStockPart({
+        pieceId: stockPartData.piece_id || stockPartData.pieceId,
+        name: stockPartData.name,
+        description: stockPartData.description,
+        quantity: stockPartData.quantity,
+        price: stockPartData.price,
+        addedAt: stockPartData.added_at || stockPartData.addedAt,
+        isAdjustment: stockPartData.is_adjustment,
+        adjustmentReason: stockPartData.adjustment_reason,
+      });
+      toast.success("Peça adicionada ao estoque com sucesso!");
+    } catch (error) {
+      console.error('Error adding stock part:', error);
+      toast.error("Erro ao adicionar peça ao estoque");
+    }
   };
 
   // Handler to add new appointment
@@ -312,27 +324,123 @@ export default function App() {
   };
 
   // Handler to edit stock part
-  const handleEditStockPart = (stockPart: StockPart) => {
+  const handleEditStockPart = (stockPart: StockPart, isIndividual: boolean = false) => {
     setStockPartToEdit(stockPart);
+    setIsIndividualStockEdit(isIndividual);
     setIsEditStockPartModalOpen(true);
   };
 
-  // Handler to update stock part
-  const handleUpdateStockPart = (updatedStockPart: StockPart) => {
-    setStockParts(stockParts.map(sp => sp.id === updatedStockPart.id ? updatedStockPart : sp));
-    toast.success("Peça do estoque atualizada com sucesso!");
+  // Handler to update stock part (generates adjustment entries)
+  const handleUpdateStockPart = async (pieceId: string, newQuantity: number, newPrice: number, newDate: string) => {
+    if (!stockPartToEdit || !pieceId) return;
+
+    // Calculate current total quantity for this piece
+    const currentTotalQuantity = stockParts
+      .filter(sp => (sp.piece_id || sp.pieceId) === pieceId)
+      .reduce((sum, sp) => sum + (sp.quantity || 0), 0);
+
+    const quantityDiff = newQuantity - currentTotalQuantity;
+
+    // Only create adjustment if there's a difference
+    if (quantityDiff !== 0) {
+      try {
+        const piece = pieces.find(p => p.id === pieceId);
+        await createStockPart({
+          pieceId: pieceId,
+          name: piece?.name || stockPartToEdit.name,
+          quantity: quantityDiff,
+          price: newPrice,
+          addedAt: `${newDate}T12:00:00.000Z`,
+          isAdjustment: true,
+          adjustmentReason: 'Ajuste manual de estoque'
+        });
+        toast.success(
+          quantityDiff > 0
+            ? `Adicionado ajuste de +${quantityDiff} unidades ao estoque`
+            : `Adicionado ajuste de ${quantityDiff} unidades ao estoque`
+        );
+      } catch (error) {
+        console.error('Error updating stock:', error);
+        toast.error("Erro ao atualizar estoque");
+      }
+    } else {
+      toast.info("Nenhuma alteração de quantidade foi feita");
+    }
+
+    setIsEditStockPartModalOpen(false);
+    setStockPartToEdit(null);
+    setIsIndividualStockEdit(false);
   };
 
-  // Handler to delete stock part
-  const handleDeleteStockPart = (id: string) => {
+  // Handler to update individual stock part record (direct update)
+  const handleUpdateIndividualStockPart = async (updatedStockPart: StockPart) => {
+    try {
+      await updateStockPart(updatedStockPart.id, {
+        quantity: updatedStockPart.quantity,
+        price: updatedStockPart.price,
+        description: updatedStockPart.description,
+      });
+      toast.success("Movimentação atualizada com sucesso!");
+    } catch (error) {
+      console.error('Error updating stock part:', error);
+      toast.error("Erro ao atualizar movimentação");
+    }
+    setIsEditStockPartModalOpen(false);
+    setStockPartToEdit(null);
+    setIsIndividualStockEdit(false);
+  };
+
+  // Handler to delete stock part from aggregated view (generates negative entry to zero stock)
+  const handleDeleteStockPart = (pieceId: string) => {
+    const stockPart = stockParts.find(sp => (sp.piece_id || sp.pieceId) === pieceId);
+    if (!stockPart) return;
+
+    // Calculate current total quantity for this piece
+    const currentTotalQuantity = stockParts
+      .filter(sp => (sp.piece_id || sp.pieceId) === pieceId)
+      .reduce((sum, sp) => sum + (sp.quantity || 0), 0);
+
     setConfirmDialog({
       open: true,
       title: "Remover do Estoque",
-      description: "Tem certeza que deseja remover esta peça do estoque? Esta ação não pode ser desfeita.",
+      description: `Tem certeza que deseja remover esta peça do estoque? Será criado um ajuste de -${currentTotalQuantity} unidades no histórico.`,
       variant: "danger",
-      onConfirm: () => {
-        setStockParts(stockParts.filter(sp => sp.id !== id));
-        toast.success("Peça removida do estoque");
+      onConfirm: async () => {
+        try {
+          const piece = pieces.find(p => p.id === pieceId);
+          await createStockPart({
+            pieceId: pieceId,
+            name: piece?.name || stockPart.name,
+            quantity: -currentTotalQuantity,
+            price: stockPart.price,
+            addedAt: new Date().toISOString(),
+            isAdjustment: true,
+            adjustmentReason: 'Remoção completa do estoque'
+          });
+          toast.success("Peça removida do estoque (ajuste negativo criado no histórico)");
+        } catch (error) {
+          console.error('Error removing from stock:', error);
+          toast.error("Erro ao remover do estoque");
+        }
+      }
+    });
+  };
+
+  // Handler to delete individual stock part record (direct deletion from history)
+  const handleDeleteIndividualStockPart = (id: string) => {
+    setConfirmDialog({
+      open: true,
+      title: "Excluir Movimentação",
+      description: "Tem certeza que deseja excluir esta movimentação? A quantidade agregada será recalculada automaticamente.",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteStockPart(id);
+          toast.success("Movimentação excluída com sucesso");
+        } catch (error) {
+          console.error('Error deleting stock part:', error);
+          toast.error("Erro ao excluir movimentação");
+        }
       }
     });
   };
@@ -588,32 +696,43 @@ export default function App() {
     }
   };
 
+  const handleAddPiece = async (pieceData: Omit<Piece, "id" | "createdAt">) => {
+    try {
+      const newPiece = await createPiece(pieceData);
+      toast.success("Peça cadastrada com sucesso!");
+      return newPiece;
+    } catch (error) {
+      console.error('Erro ao cadastrar peça:', error);
+      toast.error(error instanceof Error ? error.message : "Erro ao cadastrar peça");
+      throw error;
+    }
+  };
+
   // Handler to save service order to history
   const handleSaveToHistory = (status: ServiceOrder["status"]) => {
     if (currentServiceOrder) {
       const updatedServiceOrder = { ...currentServiceOrder, status };
       setServiceOrders([...serviceOrders, updatedServiceOrder]);
-      toast.success("O.S adicionada ao histórico com sucesso!");
-      setCurrentPage("history");
+      toast.success("O.S salva com sucesso!");
+      setCurrentPage("main");
       setCurrentServiceOrder(null);
     }
   };
 
-  // Handler to close receipt and save to history
+  // Handler to close receipt print
   const handleCloseReceiptPrint = () => {
     if (currentServiceOrder) {
       setServiceOrders([...serviceOrders, currentServiceOrder]);
-      toast.success("O.S salva no histórico!");
+      toast.success("O.S salva com sucesso!");
     }
     setIsReceiptPrintModalOpen(false);
     setCurrentServiceOrder(null);
   };
 
-  // Handler to select service order from history
+  // Handler to select service order
   const handleSelectServiceOrder = (serviceOrder: ServiceOrder) => {
     setSelectedServiceOrder(serviceOrder);
     setIsServiceOrderDetailModalOpen(true);
-    // Reset isFromHistory when opening, will be set by HistoryPage if needed
     if (!isFromHistory) {
       setIsFromHistory(false);
     }
@@ -744,68 +863,7 @@ export default function App() {
 
   // Legacy setup handler removed (technicians via Supabase users)
 
-  // Handler para venda de equipamento
-  const handleSellEquipment = async (invoice: ServiceOrder, equipmentId?: string) => {
-    try {
-      // Adicionar o token da loja
-      const invoiceWithToken = {
-        ...invoice,
-        shop_token: DEFAULT_SHOP_TOKEN
-      };
-
-      // Criar a nota fiscal como uma O.S completa
-      await createServiceOrder(invoiceWithToken);
-
-      // NOVO: Marcar equipamento como vendido no backend e recarregar a lista
-      if (equipmentId) {
-        try {
-          const { projectId, publicAnonKey } = await import('./utils/supabase/info');
-          const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-9bef0ec0/equipments/mark-as-sold`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${publicAnonKey}`,
-              },
-              body: JSON.stringify({
-                shopToken: DEFAULT_SHOP_TOKEN,
-                equipmentId: equipmentId,
-                soldDate: invoice.delivery_date || new Date().toISOString(),
-                invoiceId: invoice.id,
-              }),
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error('[SELL] Erro ao marcar equipamento como vendido:', errorData);
-          } else {
-            const result = await response.json();
-            console.log('[SELL] Equipamento marcado como vendido:', result.equipment);
-          }
-
-          // Aguardar um pouco para o banco atualizar, então recarregar
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await fetchEquipments();
-        } catch (error) {
-          console.error('Erro ao marcar equipamento como vendido:', error);
-        }
-      }
-      
-      // Abrir modal de impressão da nota fiscal (diretamente como nota fiscal, não detail)
-      setSaleInvoiceOrder(invoiceWithToken);
-      setSaleInvoiceModalType("invoice"); // Open as nota fiscal directly
-      setIsSaleInvoiceModalOpen(true);
-      
-      toast.success("Venda registrada com sucesso!", {
-        description: "Nota fiscal criada com 3 meses de garantia"
-      });
-    } catch (error) {
-      console.error("Erro ao registrar venda:", error);
-      toast.error("Erro ao registrar venda");
-    }
-  };
+  // Funcionalidade de venda de equipamentos removida
 
   // Handlers for technician management
   const handleAddTechnician = (_technician: Technician) => {
@@ -878,19 +936,7 @@ export default function App() {
       <Toaster position="top-right" />
       <div className="h-screen bg-[#f5f0e8] overflow-hidden flex">
         {/* Page Routing */}
-        {currentPage === "history" ? (
-          <HistoryPage 
-            onBack={() => setCurrentPage("main")}
-            serviceOrders={serviceOrders}
-            onSelectServiceOrder={(so) => {
-              handleSelectServiceOrder(so);
-              setIsFromHistory(true);
-            }}
-            onUpdateServiceOrder={(updatedOrder) => {
-              setServiceOrders(serviceOrders.map(so => so.id === updatedOrder.id ? updatedOrder : so));
-            }}
-          />
-        ) : currentPage === "clients" ? (
+        {currentPage === "clients" ? (
           <ClientsPage 
             onBack={() => setCurrentPage("main")}
             onViewInactive={() => setCurrentPage("inactive-clients")}
@@ -904,6 +950,7 @@ export default function App() {
             onBack={() => setCurrentPage("main")}
             parts={frontendParts}
             stockParts={stockParts}
+            pieces={pieces}
             onlineParts={onlineParts}
             serviceOrders={serviceOrders}
             onAddPart={() => setIsPartModalOpen(true)}
@@ -913,20 +960,11 @@ export default function App() {
             onDeletePart={handleDeletePart}
             onEditStockPart={handleEditStockPart}
             onDeleteStockPart={handleDeleteStockPart}
+            onDeleteIndividualStockPart={handleDeleteIndividualStockPart}
             onEditOnlinePart={handleEditOnlinePart}
             onDeleteOnlinePart={handleDeleteOnlinePart}
             onSelectServiceOrder={handleSelectServiceOrder}
           />
-        ) : currentPage === "warranties" ? (
-          <WarrantiesPage 
-            onBack={() => setCurrentPage("main")}
-            serviceOrders={serviceOrders}
-            onSelectServiceOrder={handleSelectServiceOrder}
-          />
-        ) : currentPage === "budgets" ? (
-          <BudgetsPage onBack={() => setCurrentPage("main")} />
-        ) : currentPage === "invoices" ? (
-          <InvoicesPage onBack={() => setCurrentPage("main")} />
         ) : currentPage === "equipments" ? (
           <EquipmentsPage 
             onBack={() => setCurrentPage("main")}
@@ -935,10 +973,31 @@ export default function App() {
             clients={clients}
             onViewServiceOrder={handleSelectServiceOrder}
             onAddEquipment={() => setIsEquipmentModalOpen(true)}
-            onSellEquipment={handleSellEquipment}
+            onEditEquipment={(equipment) => {
+              setEditingEquipment(equipment);
+              setIsEditEquipmentModalOpen(true);
+            }}
+            onDeleteEquipment={async (equipmentId: string) => {
+              await deleteEquipment(equipmentId);
+              toast.success("Equipamento excluído com sucesso!");
+            }}
             onCreateClient={async (clientData) => {
               await createClient(clientData);
               toast.success("Cliente criado com sucesso!");
+            }}
+          />
+        ) : currentPage === "pieces" ? (
+          <PiecesPage
+            onBack={() => setCurrentPage("main")}
+            pieces={pieces}
+            onAddPiece={() => setIsPieceModalOpen(true)}
+            onEditPiece={(piece) => {
+              setEditingPiece(piece);
+              setIsEditPieceModalOpen(true);
+            }}
+            onDeletePiece={async (pieceId: string) => {
+              await deletePiece(pieceId);
+              toast.success("Peça excluída com sucesso!");
             }}
           />
         ) : currentPage === "technicians" ? (
@@ -946,19 +1005,17 @@ export default function App() {
             onBack={() => setCurrentPage("main")}
           />
         ) : currentPage === "variables" ? (
-          <div className="min-h-screen bg-gray-50 flex">
-            <div className="w-full max-w-7xl mx-auto">
-              <div className="bg-white border-b px-6 py-4">
-                <button
-                  onClick={() => setCurrentPage("main")}
-                  className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                  ← Voltar
-                </button>
-              </div>
-              <div className="p-6">
-                <VariablesPage />
-              </div>
+          <div className="min-h-screen w-full bg-gray-50 overflow-auto">
+            <div className="w-full bg-white border-b px-6 py-4 sticky top-0 z-10">
+              <button
+                onClick={() => setCurrentPage("main")}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                ← Voltar
+              </button>
+            </div>
+            <div className="w-full p-6 overflow-auto">
+              <VariablesPage />
             </div>
           </div>
         ) : currentPage === "print-os" && currentServiceOrder ? (
@@ -981,16 +1038,12 @@ export default function App() {
             onSelectServiceOrder={handleSelectServiceOrder}
             onMoveCard={moveCard}
             onToggleDelivered={handleToggleDelivered}
-            onAddServiceOrder={handleOpenServiceOrderModal}
             onAddClient={() => setIsClientModalOpen(true)}
             onAddAppointment={() => setIsAppointmentModalOpen(true)}
             onAddPart={() => setIsPartModalOpen(true)}
-            onNavigateToHistory={() => setCurrentPage("history")}
             onNavigateToClients={() => setCurrentPage("clients")}
+            onNavigateToPieces={() => setCurrentPage("pieces")}
             onNavigateToParts={() => setCurrentPage("parts")}
-            onNavigateToWarranties={() => setCurrentPage("warranties")}
-            onNavigateToBudgets={() => setCurrentPage("budgets")}
-            onNavigateToInvoices={() => setCurrentPage("invoices")}
             onNavigateToEquipments={() => setCurrentPage("equipments")}
             onNavigateToVariables={() => setCurrentPage("variables")}
             onManageTechnicians={() => setIsTechniciansModalOpen(true)}
@@ -1015,10 +1068,6 @@ export default function App() {
         <AddClientModal 
           open={isClientModalOpen} 
           onOpenChange={setIsClientModalOpen}
-          onSuccessAndCreateOS={(client) => {
-            setPreSelectedClient(client);
-            setIsServiceOrderModalOpen(true);
-          }}
         />
         <AddAppointmentModal 
           open={isAppointmentModalOpen} 
@@ -1034,19 +1083,77 @@ export default function App() {
         />
         <AddStockPartModal
           isOpen={isStockPartModalOpen}
-          onClose={() => setIsStockPartModalOpen(false)}
+          onClose={() => {
+            setIsStockPartModalOpen(false);
+            setSelectedPieceFromAdd(null);
+          }}
           onAdd={handleAddStockPart}
+          pieces={pieces}
+          onOpenAddPieceModal={() => {
+            setIsStockPartModalOpen(false);
+            setIsFromStockModal(true);
+            setIsPieceModalOpen(true);
+          }}
+          selectedPieceFromAdd={selectedPieceFromAdd}
         />
         <AddEquipmentModal
           open={isEquipmentModalOpen}
           onOpenChange={setIsEquipmentModalOpen}
           onCreateEquipment={handleAddEquipment}
         />
+        <EditEquipmentModal
+          open={isEditEquipmentModalOpen}
+          onOpenChange={setIsEditEquipmentModalOpen}
+          equipment={editingEquipment}
+          onUpdateEquipment={async (updatedEquipment) => {
+            await updateEquipment(updatedEquipment);
+            await fetchEquipments();
+            toast.success("Equipamento atualizado com sucesso!");
+            setIsEditEquipmentModalOpen(false);
+            setEditingEquipment(null);
+          }}
+        />
+        <AddPieceModal
+          isOpen={isPieceModalOpen}
+          onClose={() => {
+            setIsPieceModalOpen(false);
+            setSelectedPieceFromAdd(null);
+            setIsFromStockModal(false);
+          }}
+          onAdd={async (pieceData) => {
+            const newPiece = await handleAddPiece(pieceData);
+            setIsPieceModalOpen(false);
+            // Se veio do botão + do modal de estoque, seleciona a peça e reabre o modal
+            if (newPiece && isFromStockModal) {
+              setSelectedPieceFromAdd(newPiece);
+              setIsStockPartModalOpen(true);
+              setIsFromStockModal(false);
+            }
+            // Se abriu direto da página de peças, só fecha o modal (não abre o de estoque)
+          }}
+        />
+        <EditPieceModal
+          isOpen={isEditPieceModalOpen}
+          onClose={() => {
+            setIsEditPieceModalOpen(false);
+            setEditingPiece(null);
+          }}
+          piece={editingPiece}
+          onUpdate={async (updatedPiece) => {
+            await updatePiece(updatedPiece);
+            toast.success("Peça atualizada com sucesso!");
+            setIsEditPieceModalOpen(false);
+            setEditingPiece(null);
+          }}
+        />
         <EditClientModal
           open={isEditClientModalOpen}
           onOpenChange={setIsEditClientModalOpen}
           client={clientToEdit}
-          onSuccess={() => toast.success("Cliente atualizado com sucesso!")}
+          onSuccess={() => {
+            toast.success("Cliente atualizado com sucesso!");
+            fetchClients(false);
+          }}
         />
         <EditPartModal
           open={isEditPartModalOpen}
@@ -1056,9 +1163,23 @@ export default function App() {
         />
         <EditStockPartModal
           isOpen={isEditStockPartModalOpen}
-          onClose={() => setIsEditStockPartModalOpen(false)}
+          onClose={() => {
+            setIsEditStockPartModalOpen(false);
+            setStockPartToEdit(null);
+            setIsIndividualStockEdit(false);
+          }}
           stockPart={stockPartToEdit}
+          currentTotalQuantity={
+            stockPartToEdit && (stockPartToEdit.piece_id || stockPartToEdit.pieceId)
+              ? stockParts
+                  .filter(sp => (sp.piece_id || sp.pieceId) === (stockPartToEdit.piece_id || stockPartToEdit.pieceId))
+                  .reduce((sum, sp) => sum + (sp.quantity || 0), 0)
+              : 0
+          }
           onUpdate={handleUpdateStockPart}
+          onUpdateIndividual={handleUpdateIndividualStockPart}
+          isIndividualEdit={isIndividualStockEdit}
+          pieces={pieces}
         />
         <TechniciansManagementModal
           open={isTechniciansModalOpen}
@@ -1131,48 +1252,6 @@ export default function App() {
           onStatusChange={handleConfirmStatusChange}
         />
         {/* ShopTokenModal removido no modo loja única */}
-        
-        {/* Sale Invoice Modal - Open nota fiscal directly for sales */}
-        {saleInvoiceOrder && saleInvoiceModalType === "invoice" && (() => {
-          const formatDate = (isoDate: string | undefined) => {
-            if (!isoDate) return new Date().toLocaleDateString("pt-BR");
-            const date = new Date(isoDate);
-            return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
-          };
-
-          const invoiceData = {
-            id: `INV-${saleInvoiceOrder.id}`,
-            osNumber: saleInvoiceOrder.osNumber || saleInvoiceOrder.os_number || saleInvoiceOrder.id,
-            clientName: saleInvoiceOrder.clientName || saleInvoiceOrder.client_name,
-            clientPhone: saleInvoiceOrder.client_phone || "",
-            device: `${saleInvoiceOrder.device || saleInvoiceOrder.equipment_type} - ${saleInvoiceOrder.brand || saleInvoiceOrder.equipment_brand || ""} ${saleInvoiceOrder.model || saleInvoiceOrder.equipment_model || ""}`,
-            items: [
-              {
-                description: saleInvoiceOrder.defect || "Venda de equipamento",
-                quantity: 1,
-                unitPrice: saleInvoiceOrder.paymentAmount || "R$ 0,00",
-                total: saleInvoiceOrder.paymentAmount || "R$ 0,00",
-              },
-            ],
-            totalValue: saleInvoiceOrder.paymentAmount || "R$ 0,00",
-            issueDate: formatDate(saleInvoiceOrder.completionDate || saleInvoiceOrder.completion_date || saleInvoiceOrder.deliveryDate || saleInvoiceOrder.delivery_date),
-            warrantyEndDate: formatDate(saleInvoiceOrder.warrantyEndDate),
-            technicianName: saleInvoiceOrder.technicianName || saleInvoiceOrder.technician_name || "Técnico Responsável",
-          };
-
-          return (
-            <InvoiceDocument
-              invoice={invoiceData}
-              isOpen={isSaleInvoiceModalOpen}
-              onClose={() => {
-                setIsSaleInvoiceModalOpen(false);
-                setSaleInvoiceOrder(null);
-              }}
-            />
-          );
-        })()}
-        
-        {/* Modal inicial de token removido no modo loja única */}
         
         {/* Confirm Dialog */}
         <ConfirmDialog

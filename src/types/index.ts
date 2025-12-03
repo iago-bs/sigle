@@ -117,14 +117,25 @@ export interface Part {
 
 export interface StockPart {
   id: string;
+  shop_token: string;
+  piece_id?: string;         // FK para pieces_manual
   name: string;              // Nome da peça (ex: "Placa UF50lg9")
   description?: string;       // Descrição adicional
-  compatibleModels: string[]; // Modelos compatíveis (ex: ["UGLG9", "LG50", "LG55"])
-  compatibleBrands?: string[];// Marcas compatíveis (ex: ["LG", "Samsung"])
-  quantity: number;           // Quantidade em estoque
-  location?: string;          // Local no estoque (ex: "Prateleira A3")
-  notes?: string;             // Observações
-  addedAt: string;            // Data de adição ao estoque
+  quantity: number;           // Quantidade (positivo=entrada, negativo=saída)
+  price?: number;             // Preço da peça nesta movimentação
+  added_at: string;           // Data de adição ao estoque
+  is_adjustment?: boolean;    // Se é um ajuste manual
+  adjustment_reason?: string; // Motivo do ajuste
+  created_at: string;
+  updated_at: string;
+  
+  // Campos legados (mantidos para compatibilidade temporária)
+  compatibleModels?: string[];
+  compatibleBrands?: string[];
+  location?: string;
+  notes?: string;
+  addedAt?: string;           // Alias para added_at
+  pieceId?: string;           // Alias para piece_id
 }
 
 export interface Equipment {
@@ -142,6 +153,15 @@ export interface Equipment {
   warrantyEndDate?: string; // Data de fim da garantia (3 meses após venda)
   soldTo?: string; // Cliente que comprou
   soldDate?: string; // Data da venda (alias de saleDate, quando aplicável)
+}
+
+export interface Piece {
+  id: string;
+  name: string;              // Nome da peça
+  partType: string;          // Tipo da peça (do sistema de variáveis)
+  serialNumber?: string;     // Número de série
+  notes?: string;            // Observações
+  createdAt: string;         // Data de cadastro
 }
 
 export interface OnlinePart {
@@ -167,4 +187,4 @@ export interface SystemVariable {
 
 export type VariableCategory = "part_types" | "device_types" | "brands" | "product_colors";
 
-export type PageType = "main" | "history" | "clients" | "inactive-clients" | "parts" | "warranties" | "budgets" | "invoices" | "print-os" | "equipments" | "technicians" | "variables";
+export type PageType = "main" | "clients" | "inactive-clients" | "parts" | "pieces" | "print-os" | "equipments" | "technicians" | "variables";
