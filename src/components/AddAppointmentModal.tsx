@@ -12,17 +12,13 @@ interface AddAppointmentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddAppointment: (appointment: Appointment) => void;
-  serviceOrders: ServiceOrder[];
 }
 
 export function AddAppointmentModal({ 
   open, 
   onOpenChange, 
-  onAddAppointment,
-  serviceOrders 
+  onAddAppointment
 }: AddAppointmentModalProps) {
-  const [mode, setMode] = useState<"manual" | "from-os">("from-os");
-  const [selectedOSId, setSelectedOSId] = useState<string>("");
   const [formData, setFormData] = useState({
     osNumber: "",
     clientName: "",
@@ -34,29 +30,10 @@ export function AddAppointmentModal({
     statusColor: "yellow"
   });
 
-  // Filtrar apenas O.S em andamento
-  const inProgressOrders = serviceOrders.filter(
-    so => so.status === "in-progress" || so.status === "pending"
-  );
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    let appointmentData = formData;
-    
-    // Se selecionou uma O.S, preencher os dados dela
-    if (mode === "from-os" && selectedOSId) {
-      const selectedOS = serviceOrders.find(so => so.id === selectedOSId);
-      if (selectedOS) {
-        appointmentData = {
-          ...formData,
-          osNumber: selectedOS.osNumber || selectedOS.id.slice(-4),
-          clientName: selectedOS.clientName,
-          service: selectedOS.defect,
-          model: `${selectedOS.brand} ${selectedOS.model}`
-        };
-      }
-    }
+    const appointmentData = formData;
     
     const statusMap = {
       green: { status: "ready" as const, message: "Pronto para retirada" },
@@ -81,8 +58,6 @@ export function AddAppointmentModal({
     onAddAppointment(newAppointment);
     
     // Reset form
-    setMode("from-os");
-    setSelectedOSId("");
     setFormData({
       osNumber: "",
       clientName: "",
@@ -111,72 +86,7 @@ export function AddAppointmentModal({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Mode Selection */}
-          <div className="space-y-3">
-            <Label>Como deseja criar o agendamento?</Label>
-            <RadioGroup value={mode} onValueChange={(v) => setMode(v as "manual" | "from-os")}>
-              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <RadioGroupItem value="from-os" id="from-os" />
-                <Label htmlFor="from-os" className="flex-1 cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-blue-600" />
-                    <span>A partir de uma O.S existente</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {inProgressOrders.length > 0 
-                      ? `${inProgressOrders.length} O.S disponível(is)`
-                      : "Nenhuma O.S em andamento"}
-                  </p>
-                </Label>
-              </div>
-              
-              <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <RadioGroupItem value="manual" id="manual" />
-                <Label htmlFor="manual" className="flex-1 cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-green-600" />
-                    <span>Criar manualmente</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Preencher informações manualmente
-                  </p>
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-
-          {/* Select O.S if mode is from-os */}
-          {mode === "from-os" && (
-            <div className="space-y-2">
-              <Label htmlFor="select-os">Selecione a O.S *</Label>
-              <Select 
-                value={selectedOSId}
-                onValueChange={setSelectedOSId}
-                required
-              >
-                <SelectTrigger id="select-os">
-                  <SelectValue placeholder="Escolha uma O.S..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {inProgressOrders.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      Nenhuma O.S disponível
-                    </SelectItem>
-                  ) : (
-                    inProgressOrders.map(so => (
-                      <SelectItem key={so.id} value={so.id}>
-                        O.S #{so.osNumber || so.id.slice(-4)} - {so.clientName} ({so.brand} {so.model})
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Manual Fields */}
-          {mode === "manual" && (
-            <>
               <div className="space-y-2">
                 <Label htmlFor="os">Número da O.S *</Label>
                 <Input
@@ -222,8 +132,6 @@ export function AddAppointmentModal({
                   />
                 </div>
               </div>
-            </>
-          )}
 
           {/* Common Fields - Date, Time, Type */}
           <div className="grid grid-cols-2 gap-4">
