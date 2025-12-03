@@ -44,14 +44,17 @@ export const VariablesPage = () => {
   );
 
   const handleAdd = () => {
-    if (!newValue.trim()) {
+    const valueToAdd = newValue || searchTerm;
+    
+    if (!valueToAdd.trim()) {
       setError('Por favor, digite um valor válido');
       return;
     }
 
-    const success = addVariable(selectedCategory, newValue);
+    const success = addVariable(selectedCategory, valueToAdd);
     if (success) {
       setNewValue('');
+      setSearchTerm('');
       setShowAddForm(false);
       setError('');
     } else {
@@ -160,66 +163,38 @@ export const VariablesPage = () => {
       </div>
 
       {/* Search and Add */}
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-3 items-center">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none z-10" />
           <input
             type="text"
-            placeholder={`Pesquisar em ${categoryLabels[selectedCategory].toLowerCase()}...`}
+            placeholder="Pesquisar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brown-500 focus:border-brown-500"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchTerm.trim() && filteredVariables.length === 0) {
+                setNewValue(searchTerm);
+                handleAdd();
+              }
+            }}
+            className="relative w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brown-500 focus:border-brown-500 bg-white"
+            autoComplete="off"
           />
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-brown-600 text-white rounded-lg hover:bg-brown-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Adicionar
-        </button>
+        {searchTerm.trim() && filteredVariables.length === 0 && (
+          <button
+            onClick={() => {
+              setNewValue(searchTerm);
+              handleAdd();
+            }}
+            style={{ backgroundColor: '#8b7355', color: '#fff' }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap shadow-md"
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar
+          </button>
+        )}
       </div>
-
-      {/* Add Form */}
-      {showAddForm && (
-        <div className="bg-gray-50 p-4 rounded-lg border">
-          <div className="flex gap-2 items-center">
-            <input
-              type="text"
-              placeholder={`Novo ${categoryLabels[selectedCategory].toLowerCase().slice(0, -1)}...`}
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleAdd();
-                } else if (e.key === 'Escape') {
-                  setShowAddForm(false);
-                  setNewValue('');
-                }
-              }}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brown-500 focus:border-brown-500"
-              autoFocus
-            />
-            <button
-              onClick={handleAdd}
-              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Save className="h-4 w-4" />
-              Salvar
-            </button>
-            <button
-              onClick={() => {
-                setShowAddForm(false);
-                setNewValue('');
-              }}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Variables List */}
       <div className="bg-white rounded-lg border overflow-hidden">

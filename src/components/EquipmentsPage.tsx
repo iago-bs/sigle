@@ -1,10 +1,20 @@
-import { ArrowLeft, Search, TrendingUp, AlertCircle, Wrench, Calendar, BarChart3, Plus, DollarSign } from "lucide-react";
+import { ArrowLeft, Search, TrendingUp, AlertCircle, Wrench, Calendar, BarChart3, Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "./ui/badge";
 import type { ServiceOrder, Equipment, Client } from "../types";
-import { SellEquipmentModal } from "./SellEquipmentModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
+import { toast } from "sonner";
 
 interface EquipmentsPageProps {
   onBack: () => void;
@@ -13,7 +23,8 @@ interface EquipmentsPageProps {
   clients: Client[];
   onViewServiceOrder: (serviceOrder: ServiceOrder) => void;
   onAddEquipment: () => void;
-  onSellEquipment: (invoice: ServiceOrder, equipmentId?: string) => void;
+  onEditEquipment: (equipment: Equipment) => void;
+  onDeleteEquipment: (equipmentId: string) => Promise<void>;
   onCreateClient: (clientData: any) => Promise<void>;
 }
 
@@ -134,12 +145,22 @@ function formatDate(dateString: string): string {
   });
 }
 
-export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipments, clients, onViewServiceOrder, onAddEquipment, onSellEquipment, onCreateClient }: EquipmentsPageProps) {
+export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipments, clients, onViewServiceOrder, onAddEquipment, onEditEquipment, onDeleteEquipment, onCreateClient }: EquipmentsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentStats | null>(null);
-  const [isSellModalOpen, setIsSellModalOpen] = useState(false);
-  const [equipmentToSell, setEquipmentToSell] = useState<Equipment | null>(null);
   const [activeTab, setActiveTab] = useState<"disponiveis" | "vendidos" | "garantia">("disponiveis");
+  const [equipmentToDelete, setEquipmentToDelete] = useState<EquipmentStats | null>(null);
+
+  // Atualizar selectedEquipment quando equipments mudar (após edição)
+  useEffect(() => {
+    if (selectedEquipment && selectedEquipment.equipmentId) {
+      const allEquipments = groupServiceOrdersByEquipment(serviceOrders, manualEquipments);
+      const updated = allEquipments.find(eq => eq.equipmentId === selectedEquipment.equipmentId);
+      if (updated) {
+        setSelectedEquipment(updated);
+      }
+    }
+  }, [manualEquipments, serviceOrders]);
 
   // Agrupar equipamentos (mesclar manuais + O.S)
   const allEquipments = groupServiceOrdersByEquipment(serviceOrders, manualEquipments);
@@ -211,21 +232,26 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
       eq.device.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleSellClick = (equipment: EquipmentStats) => {
-    if (!equipment.equipmentId) return;
-    
-    // Encontrar o equipamento manual original
-    const originalEquipment = manualEquipments.find(e => e.id === equipment.equipmentId);
-    if (originalEquipment) {
-      setEquipmentToSell(originalEquipment);
-      setIsSellModalOpen(true);
-    }
+  // Funcionalidade de venda removida
+
+  // Função para verificar se equipamento pode ser excluído
+  const canDeleteEquipment = (equipment: EquipmentStats): boolean => {
+    // Só pode excluir se for equipamento manual (tem equipmentId) e não tem ordens de serviço
+    return !!equipment.equipmentId && equipment.totalServices === 0;
   };
 
-  const handleSellComplete = (invoice: ServiceOrder) => {
-    onSellEquipment(invoice, equipmentToSell?.id);
-    setIsSellModalOpen(false);
-    setEquipmentToSell(null);
+  // Função para excluir equipamento
+  const handleDeleteEquipment = async () => {
+    if (!equipmentToDelete?.equipmentId) return;
+
+    try {
+      await onDeleteEquipment(equipmentToDelete.equipmentId);
+      setEquipmentToDelete(null);
+      setSelectedEquipment(null);
+    } catch (error) {
+      console.error('Erro ao excluir equipamento:', error);
+      toast.error(error instanceof Error ? error.message : "Erro ao excluir equipamento");
+    }
   };
 
   return (
@@ -354,7 +380,7 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                     </div>
                   </div>
                   {selectedEquipment.isManual && selectedEquipment.equipmentId && (
-                    <div>
+                    <div className="flex gap-2">
                       {/* Verificar se já foi vendido */}
                       {(() => {
                         const manual = manualEquipments.find(m => m.id === selectedEquipment.equipmentId);
@@ -368,16 +394,41 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                           );
                         }
                         
-                        return (
-                          <Button
-                            onClick={() => handleSellClick(selectedEquipment)}
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <DollarSign className="w-4 h-4 mr-2" />
-                            Vender
-                          </Button>
-                        );
+                        return null; // Funcionalidade de venda removida
                       })()}
+                      
+                      {/* Botão de editar (apenas para equipamentos manuais) */}
+                      {selectedEquipment.isManual && selectedEquipment.equipmentId && (
+                        <Button
+                          onClick={() => {
+                            const equipment = manualEquipments.find(e => e.id === selectedEquipment.equipmentId);
+                            if (equipment) {
+                              onEditEquipment(equipment);
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="border-[#8b7355] text-[#8b7355] hover:bg-[#8b7355] hover:text-white"
+                        >
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Editar
+                        </Button>
+                      )}
+                      
+                      {/* Botão de excluir */}
+                      {canDeleteEquipment(selectedEquipment) ? (
+                        <button
+                          onClick={() => setEquipmentToDelete(selectedEquipment)}
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700 rounded-md transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Excluir
+                        </button>
+                      ) : selectedEquipment.totalServices > 0 && (
+                        <div className="bg-yellow-50 border border-yellow-300 rounded px-3 py-2">
+                          <span className="text-sm text-yellow-700">Equipamento com histórico não pode ser excluído</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -608,39 +659,55 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
                         </div>
                       ) : null}
 
-                      {/* Última data de serviço ou Botão Vender */}
+                      {/* Última data de serviço ou Botões de Ação */}
                       {equipment.isManual && equipment.equipmentId ? (
-                        <div className="flex items-center justify-between gap-2 mt-3">
-                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <div className="mt-3">
+                          <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
                             <Calendar className="w-3 h-3" />
                             {equipment.lastServiceDate ? formatDate(equipment.lastServiceDate) : 'Sem serviços'}
                           </div>
-                          {(() => {
-                            const manual = manualEquipments.find(m => m.id === equipment.equipmentId);
-                            const isAlreadySold = (manual?.status === "sold") || !!manual?.soldDate || !!manual?.warrantyEndDate;
-                            
-                            if (isAlreadySold) {
-                              return (
-                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                                  ✓ Vendido
-                                </span>
-                              );
-                            }
-                            
-                            return (
-                              <Button
-                                size="sm"
+                          <div className="flex items-center gap-2">
+                            {/* Botão Editar */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const eq = manualEquipments.find(m => m.id === equipment.equipmentId);
+                                if (eq) onEditEquipment(eq);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#8b7355] text-white hover:bg-[#7a6345] rounded transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              Editar
+                            </button>
+                            {/* Botão Deletar - só aparece se não tiver histórico */}
+                            {equipment.totalServices === 0 && (
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleSellClick(equipment);
+                                  setEquipmentToDelete(equipment);
                                 }}
-                                className="bg-green-600 hover:bg-green-700 text-white h-7 text-xs px-2"
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-600 text-white hover:bg-red-700 rounded transition-colors"
                               >
-                                <DollarSign className="w-3 h-3 mr-1" />
-                                Vender
-                              </Button>
-                            );
-                          })()}
+                                <Trash2 className="w-3 h-3" />
+                                Excluir
+                              </button>
+                            )}
+                            {/* Status de vendido */}
+                            {(() => {
+                              const manual = manualEquipments.find(m => m.id === equipment.equipmentId);
+                              const isAlreadySold = (manual?.status === "sold") || !!manual?.soldDate || !!manual?.warrantyEndDate;
+                              
+                              if (isAlreadySold) {
+                                return (
+                                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1.5 rounded">
+                                    ✓ Vendido
+                                  </span>
+                                );
+                              }
+                              
+                              return null;
+                            })()}
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1 text-xs text-gray-500 mt-3">
@@ -678,15 +745,33 @@ export function EquipmentsPage({ onBack, serviceOrders, equipments: manualEquipm
         </div>
       )}
 
-      {/* Modal de Venda */}
-      <SellEquipmentModal
-        open={isSellModalOpen}
-        onOpenChange={setIsSellModalOpen}
-        equipment={equipmentToSell}
-        clients={clients}
-        onSell={handleSellComplete}
-        onCreateClient={onCreateClient}
-      />
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!equipmentToDelete}
+        onOpenChange={(open) => !open && setEquipmentToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Equipamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o equipamento{" "}
+              <strong>{equipmentToDelete?.brand} {equipmentToDelete?.model}</strong>?
+              <br /><br />
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteEquipment}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

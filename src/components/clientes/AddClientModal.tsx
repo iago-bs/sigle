@@ -19,10 +19,9 @@ interface AddClientModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-  onSuccessAndCreateOS?: (client: any) => void;
 }
 
-export function AddClientModal({ open, onOpenChange, onSuccess, onSuccessAndCreateOS }: AddClientModalProps) {
+export function AddClientModal({ open, onOpenChange, onSuccess }: AddClientModalProps) {
   const { createClient } = useClients();
   const [formData, setFormData] = useState({
     name: "",
@@ -153,14 +152,15 @@ export function AddClientModal({ open, onOpenChange, onSuccess, onSuccessAndCrea
     }
   };
 
-  const handleSaveAndCreateOS = async () => {
-    const clientData = await handleSubmit();
-    if (clientData && onSuccessAndCreateOS) {
-      setTimeout(() => {
-        onSuccessAndCreateOS(clientData);
-      }, 300);
-    }
-  };
+  // Funcionalidade de O.S. desabilitada
+  // const handleSaveAndCreateOS = async () => {
+  //   const clientData = await handleSubmit();
+  //   if (clientData && onSuccessAndCreateOS) {
+  //     setTimeout(() => {
+  //       onSuccessAndCreateOS(clientData);
+  //     }, 300);
+  //   }
+  // };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -337,22 +337,11 @@ export function AddClientModal({ open, onOpenChange, onSuccess, onSuccessAndCrea
             </Button>
             <Button 
               type="submit" 
-              variant="outline"
-              className="border-[#8b7355] text-[#8b7355] hover:bg-[#8b7355]/10 w-full sm:w-auto"
+              className="bg-[#8b7355] hover:bg-[#7a6345] w-full sm:w-auto"
               disabled={isSubmitting}
             >
               {isSubmitting ? "Cadastrando..." : "Salvar"}
             </Button>
-            {onSuccessAndCreateOS && (
-              <Button 
-                type="button" 
-                className="bg-[#8b7355] hover:bg-[#7a6345] w-full sm:w-auto"
-                disabled={isSubmitting}
-                onClick={handleSaveAndCreateOS}
-              >
-                {isSubmitting ? "Cadastrando..." : "Salvar e Continuar para O.S"}
-              </Button>
-            )}
           </DialogFooter>
         </form>
       </DialogContent>

@@ -2,10 +2,10 @@
 
 Write-Host "Gerando bundle consolidado..." -ForegroundColor Green
 
-# Ler os arquivos
-$database = Get-Content "src\supabase\functions\server\database.ts" -Raw
-$email = Get-Content "src\supabase\functions\server\email.ts" -Raw
-$index = Get-Content "src\supabase\functions\server\index.tsx" -Raw
+# Ler os arquivos com encoding UTF-8
+$database = Get-Content "src\supabase\functions\server\database.ts" -Raw -Encoding UTF8
+$email = Get-Content "src\supabase\functions\server\email.ts" -Raw -Encoding UTF8
+$index = Get-Content "src\supabase\functions\server\index.tsx" -Raw -Encoding UTF8
 
 # Remover imports dos módulos inline no index
 $index = $index -replace 'import \* as db from "\.\/database\.ts";', '// Database functions inlined below'
@@ -111,8 +111,9 @@ $mappings
 $index
 "@
 
-# Salvar bundle
-$bundle | Out-File -FilePath "edge-function-bundle.ts" -Encoding utf8
+# Salvar bundle (UTF-8 sem BOM)
+$Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+[System.IO.File]::WriteAllText("$PWD\edge-function-bundle.ts", $bundle, $Utf8NoBomEncoding)
 
 Write-Host "Bundle gerado com sucesso: edge-function-bundle.ts" -ForegroundColor Green
 Write-Host "Cole o conteúdo deste arquivo no Supabase Dashboard" -ForegroundColor Yellow

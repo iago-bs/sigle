@@ -1006,7 +1006,9 @@ app.post("/make-server-9bef0ec0/parts", async (c) => {
       status: data.status || 'pending',
       estimated_arrival_date: data.estimated_arrival_date,
       notes: data.notes,
-    });
+      piece_id: data.pieceId, // Adicionar piece_id
+      price: data.price, // Adicionar price para estoque
+    } as any);
 
     return c.json({ success: true, part });
 
@@ -1129,7 +1131,138 @@ app.post("/make-server-9bef0ec0/equipments", async (c) => {
   }
 });
 
+// Update equipment
+app.put("/make-server-9bef0ec0/equipments/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const data = await c.req.json();
+    
+    if (!id) {
+      return c.json({ error: "Equipment ID is required" }, 400);
+    }
 
+    const { brand, model, device, serialNumber, notes } = data;
+
+    if (!brand || !model || !device) {
+      return c.json({ error: "Brand, model, and device are required" }, 400);
+    }
+
+    console.log(`[PUT] Attempting to update equipment ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    // Check if equipment exists
+    const { data: equipment, error: fetchError } = await supabase
+      .from('equipments_manual')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !equipment) {
+      console.log(`[PUT] Equipment not found: ${id}`);
+      return c.json({ error: "Equipment not found" }, 404);
+    }
+
+    // Update equipment
+    const { data: updatedEquipment, error: updateError } = await supabase
+      .from('equipments_manual')
+      .update({
+        brand,
+        model,
+        device,
+        serial_number: serialNumber || null,
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.log(`[PUT] Error updating equipment:`, updateError);
+      return c.json({ error: "Error updating equipment" }, 500);
+    }
+
+    console.log(`[PUT] Equipment ${id} updated successfully`);
+    return c.json({ success: true, equipment: updatedEquipment });
+
+  } catch (error) {
+    console.log(`Update equipment error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error updating equipment",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Delete equipment
+app.delete("/make-server-9bef0ec0/equipments/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Equipment ID is required" }, 400);
+    }
+
+    console.log(`[DELETE] Attempting to delete equipment ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    // Check if equipment exists
+    const { data: equipment, error: fetchError } = await supabase
+      .from('equipments_manual')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !equipment) {
+      console.log(`[DELETE] Equipment not found: ${id}`);
+      return c.json({ error: "Equipment not found" }, 404);
+    }
+
+    // Check if equipment has associated service orders
+    const { data: orders, error: ordersError } = await supabase
+      .from('service_orders')
+      .select('id')
+      .eq('equipment_brand', equipment.brand)
+      .eq('equipment_model', equipment.model)
+      .limit(1);
+
+    if (ordersError) {
+      console.log(`[DELETE] Error checking service orders:`, ordersError);
+      return c.json({ error: "Error checking service orders" }, 500);
+    }
+
+    if (orders && orders.length > 0) {
+      return c.json({ 
+        error: "Cannot delete equipment with associated service orders" 
+      }, 400);
+    }
+
+    // Delete equipment
+    const { error: deleteError } = await supabase
+      .from('equipments_manual')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.log(`[DELETE] Error deleting equipment:`, deleteError);
+      return c.json({ error: "Error deleting equipment" }, 500);
+    }
+
+    console.log(`[DELETE] Equipment ${id} deleted successfully`);
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete equipment error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error deleting equipment",
+      details: errorMessage 
+    }, 500);
+  }
+});
 
 // Mark equipment as sold
 app.post("/make-server-9bef0ec0/equipments/mark-as-sold", async (c) => {
@@ -1180,6 +1313,431 @@ app.post("/make-server-9bef0ec0/equipments/mark-as-sold", async (c) => {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     return c.json({ 
       error: "Erro ao marcar equipamento como vendido",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// ============================================
+// STOCK_PARTS ENDPOINTS (Movimentações de Estoque)
+// ============================================
+
+// Get all stock movements
+app.get("/make-server-9bef0ec0/stock-parts", async (c) => {
+  try {
+    const shopToken = c.req.query('shopToken');
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    console.log(`[GET /stock-parts] Fetching stock for shop ${shopToken}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { data: stockParts, error } = await supabase
+      .from('stock_parts')
+      .select('*')
+      .eq('shop_token', shopToken)
+      .order('added_at', { ascending: false });
+
+    if (error) {
+      console.error(`[GET /stock-parts] Error:`, error);
+      return c.json({ 
+        error: "Erro ao buscar estoque",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[GET /stock-parts] Found ${stockParts?.length || 0} stock entries`);
+    return c.json(stockParts || []);
+
+  } catch (error) {
+    console.log(`Get stock-parts error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao buscar estoque",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Create stock movement
+app.post("/make-server-9bef0ec0/stock-parts", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken } = data;
+
+    if (!shopToken) {
+      return c.json({ error: "Token da loja é obrigatório" }, 400);
+    }
+
+    console.log(`[POST /stock-parts] Creating stock entry:`, {
+      piece_id: data.pieceId,
+      name: data.name,
+      quantity: data.quantity,
+      price: data.price
+    });
+
+    const supabase = db.getSupabaseClient();
+    
+    const { data: stockPart, error } = await supabase
+      .from('stock_parts')
+      .insert({
+        shop_token: shopToken,
+        piece_id: data.pieceId,
+        name: data.name,
+        description: data.description,
+        quantity: data.quantity,
+        price: data.price,
+        added_at: data.addedAt || new Date().toISOString(),
+        is_adjustment: data.isAdjustment || false,
+        adjustment_reason: data.adjustmentReason || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`[POST /stock-parts] Error:`, error);
+      return c.json({ 
+        error: "Erro ao criar movimentação de estoque",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[POST /stock-parts] Stock entry created with ID: ${stockPart.id}`);
+    return c.json({ success: true, stockPart });
+
+  } catch (error) {
+    console.log(`Create stock-part error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao criar movimentação de estoque",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Update stock movement (for adjustments)
+app.put("/make-server-9bef0ec0/stock-parts/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const data = await c.req.json();
+    
+    if (!id) {
+      return c.json({ error: "Stock ID é obrigatório" }, 400);
+    }
+
+    console.log(`[PUT /stock-parts] Updating stock entry ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { data: updatedStock, error } = await supabase
+      .from('stock_parts')
+      .update({
+        quantity: data.quantity,
+        price: data.price,
+        description: data.description,
+        is_adjustment: data.isAdjustment,
+        adjustment_reason: data.adjustmentReason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.log(`[PUT /stock-parts] Error:`, error);
+      return c.json({ 
+        error: "Erro ao atualizar movimentação",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[PUT /stock-parts] Stock entry ${id} updated`);
+    return c.json({ success: true, stockPart: updatedStock });
+
+  } catch (error) {
+    console.log(`Update stock-part error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao atualizar movimentação",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Delete stock movement
+app.delete("/make-server-9bef0ec0/stock-parts/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Stock ID é obrigatório" }, 400);
+    }
+
+    console.log(`[DELETE /stock-parts] Deleting stock entry ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { error } = await supabase
+      .from('stock_parts')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.log(`[DELETE /stock-parts] Error:`, error);
+      return c.json({ 
+        error: "Erro ao deletar movimentação",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[DELETE /stock-parts] Stock entry ${id} deleted`);
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete stock-part error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Erro ao deletar movimentação",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// ============================================
+// PIECES ENDPOINTS
+// ============================================
+
+// Get all pieces
+app.get("/make-server-9bef0ec0/pieces", async (c) => {
+  try {
+    const shopToken = c.req.query('shopToken');
+
+    if (!shopToken) {
+      return c.json({ error: "Shop token is required" }, 400);
+    }
+
+    console.log(`[GET /pieces] Fetching pieces for shop ${shopToken}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { data: pieces, error } = await supabase
+      .from('pieces_manual')
+      .select('*')
+      .eq('shop_token', shopToken)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error(`[GET /pieces] Error:`, error);
+      return c.json({ 
+        error: "Error fetching pieces",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[GET /pieces] Found ${pieces.length} pieces`);
+    return c.json(pieces || []);
+
+  } catch (error) {
+    console.log(`Get pieces error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error fetching pieces",
+      details: errorMessage 
+    }, 500);
+  }
+});// Create piece
+app.post("/make-server-9bef0ec0/pieces", async (c) => {
+  try {
+    const data = await c.req.json();
+    const { shopToken, name, partType, serialNumber, notes } = data;
+
+    if (!shopToken) {
+      return c.json({ error: "Shop token is required" }, 400);
+    }
+
+    if (!name || !partType) {
+      return c.json({ error: "Name and part type are required" }, 400);
+    }
+
+    console.log(`[POST /pieces] Creating piece: ${name}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    const { data: piece, error } = await supabase
+      .from('pieces_manual')
+      .insert({
+        shop_token: shopToken,
+        name,
+        part_type: partType,
+        serial_number: serialNumber || null,
+        notes: notes || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`[POST /pieces] Error:`, error);
+      return c.json({ 
+        error: "Error creating piece",
+        details: error.message 
+      }, 500);
+    }
+
+    console.log(`[POST /pieces] Piece created successfully with ID: ${piece.id}`);
+    return c.json({ success: true, piece });
+
+  } catch (error) {
+    console.log(`Create piece error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error creating piece",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Update piece
+app.put("/make-server-9bef0ec0/pieces/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    const data = await c.req.json();
+    
+    if (!id) {
+      return c.json({ error: "Piece ID is required" }, 400);
+    }
+
+    const { name, partType, serialNumber, notes } = data;
+
+    if (!name || !partType) {
+      return c.json({ error: "Name and part type are required" }, 400);
+    }
+
+    console.log(`[PUT /pieces] Updating piece ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    // Check if piece exists
+    const { data: piece, error: fetchError } = await supabase
+      .from('pieces_manual')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !piece) {
+      console.log(`[PUT /pieces] Piece not found: ${id}`);
+      return c.json({ error: "Piece not found" }, 404);
+    }
+
+    // Update piece
+    const { data: updatedPiece, error: updateError } = await supabase
+      .from('pieces_manual')
+      .update({
+        name,
+        part_type: partType,
+        serial_number: serialNumber || null,
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.log(`[PUT /pieces] Error updating piece:`, updateError);
+      return c.json({ error: "Error updating piece" }, 500);
+    }
+
+    console.log(`[PUT /pieces] Piece ${id} updated successfully`);
+    return c.json({ success: true, piece: updatedPiece });
+
+  } catch (error) {
+    console.log(`Update piece error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error updating piece",
+      details: errorMessage 
+    }, 500);
+  }
+});
+
+// Delete piece
+app.delete("/make-server-9bef0ec0/pieces/:id", async (c) => {
+  try {
+    const id = c.req.param('id');
+    
+    if (!id) {
+      return c.json({ error: "Piece ID is required" }, 400);
+    }
+
+    console.log(`[DELETE /pieces] Attempting to delete piece ${id}`);
+
+    const supabase = db.getSupabaseClient();
+    
+    // Check if piece exists
+    const { data: piece, error: fetchError } = await supabase
+      .from('pieces_manual')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !piece) {
+      console.log(`[DELETE /pieces] Piece not found: ${id}`);
+      return c.json({ error: "Piece not found" }, 404);
+    }
+
+    // Check if piece is used in stock (across all shops)
+    console.log(`[DELETE /pieces] Checking if piece ${id} is used in stock_parts...`);
+    const { data: stockParts, error: stockError } = await supabase
+      .from('stock_parts')
+      .select('id, shop_token, piece_id')
+      .eq('piece_id', id);
+
+    console.log(`[DELETE /pieces] Stock check result:`, { 
+      found: stockParts?.length || 0, 
+      error: stockError,
+      stockParts: stockParts 
+    });
+
+    if (stockError) {
+      console.log(`[DELETE /pieces] Error checking stock:`, stockError);
+      return c.json({ error: "Erro ao verificar uso no estoque" }, 500);
+    }
+
+    if (stockParts && stockParts.length > 0) {
+      console.log(`[DELETE /pieces] Piece is in use in ${stockParts.length} stock entries`);
+      return c.json({ 
+        error: "Não é possível excluir esta peça porque ela está sendo usada no estoque. Remova primeiro todas as movimentações desta peça." 
+      }, 400);
+    }
+
+    console.log(`[DELETE /pieces] Piece is not in use, proceeding with deletion`);
+
+    // Delete piece
+    const { error: deleteError } = await supabase
+      .from('pieces_manual')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.log(`[DELETE /pieces] Error deleting piece:`, deleteError);
+      return c.json({ error: "Error deleting piece" }, 500);
+    }
+
+    console.log(`[DELETE /pieces] Piece ${id} deleted successfully`);
+    return c.json({ success: true });
+
+  } catch (error) {
+    console.log(`Delete piece error: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ 
+      error: "Error deleting piece",
       details: errorMessage 
     }, 500);
   }

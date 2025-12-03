@@ -22,6 +22,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: false, // Temporariamente desabilitado para desenvolvimento
+      allowRunningInsecureContent: true, // Permite conteúdo HTTP em páginas HTTPS
       allowRunningInsecureContent: false,
       enableRemoteModule: false,
       webgl: false, // Desabilita WebGL para reduzir dependências

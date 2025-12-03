@@ -4,9 +4,6 @@ import { Button } from "./ui/button";
 import { useClients, type Client } from "../hooks/useClients";
 import { AddClientModal } from "./clientes/AddClientModal";
 import { EditClientModal } from "./clientes/EditClientModal";
-import { AddServiceOrderModal } from "./AddServiceOrderModal";
-import { useTechnicians } from "../hooks/useTechnicians";
-import { useParts } from "../hooks/useParts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,13 +23,9 @@ interface ClientsPageProps {
 
 export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
   const { clients, loading, inactivateClient, fetchClients } = useClients();
-  const { technicians } = useTechnicians();
-  const { stockParts } = useParts();
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showServiceOrderModal, setShowServiceOrderModal] = useState(false);
-  const [preSelectedClient, setPreSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
 
@@ -212,27 +205,15 @@ export function ClientsPage({ onBack, onViewInactive }: ClientsPageProps) {
           // Recarrega a lista do hook desta página após criar
           fetchClients(false);
         }}
-        onSuccessAndCreateOS={(client) => {
-          setPreSelectedClient(client);
-          setShowServiceOrderModal(true);
-        }}
       />
 
       <EditClientModal
         open={showEditModal}
         onOpenChange={setShowEditModal}
         client={editingClient}
-      />
-
-      <AddServiceOrderModal
-        open={showServiceOrderModal}
-        onOpenChange={setShowServiceOrderModal}
-        technicians={technicians}
-        stockParts={stockParts}
-        preSelectedClient={preSelectedClient}
         onSuccess={() => {
-          setShowServiceOrderModal(false);
-          setPreSelectedClient(null);
+          // Recarrega a lista após editar
+          fetchClients(false);
         }}
       />
 
